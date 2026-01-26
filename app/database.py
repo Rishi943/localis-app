@@ -7,7 +7,38 @@ import time
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple, Union
 
-DB_NAME = "chat_history.db"
+# ------------------------------
+# Database Path Resolution
+# ------------------------------
+
+def _resolve_db_path() -> str:
+    """
+    Resolves the database path based on environment variables.
+    Priority:
+    1. LOCALIS_DB_PATH - exact path if set
+    2. LOCALIS_DATA_DIR - <dir>/chat_history.db if set
+    3. Fallback - chat_history.db in current directory
+    """
+    if "LOCALIS_DB_PATH" in os.environ:
+        return os.environ["LOCALIS_DB_PATH"]
+    elif "LOCALIS_DATA_DIR" in os.environ:
+        data_dir = os.environ["LOCALIS_DATA_DIR"]
+        return os.path.join(data_dir, "chat_history.db")
+    else:
+        return "chat_history.db"
+
+DB_PATH = _resolve_db_path()
+
+def _ensure_db_directory():
+    """Ensures the parent directory of the database exists."""
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir and not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
+
+def _connect_db() -> sqlite3.Connection:
+    """Creates a database connection, ensuring the directory exists first."""
+    _ensure_db_directory()
+    return sqlite3.connect(DB_PATH)
 
 # ------------------------------
 # Strict Auto-Memory Schema
@@ -71,12 +102,12 @@ def init_db():
     Performs a schema health check to handle legacy databases.
     """
     # Detect fresh install before connection creates the file
-    is_new_db = not os.path.exists(DB_NAME)
+    is_new_db = not os.path.exists(DB_PATH)
 
     # 0. Schema Health Check
-    if os.path.exists(DB_NAME):
+    if os.path.exists(DB_PATH):
         try:
-            conn = sqlite3.connect(DB_NAME)
+            conn = _connect_db()
             c = conn.cursor()
 
             # Check sessions table columns
@@ -99,9 +130,9 @@ def init_db():
             if is_legacy_sessions or is_legacy_messages:
                 print(" [System] Critical: Database schema mismatch detected (legacy version).")
                 timestamp = int(time.time())
-                backup_name = f"{DB_NAME}.bak.{timestamp}"
+                backup_name = f"{DB_PATH}.bak.{timestamp}"
                 try:
-                    os.rename(DB_NAME, backup_name)
+                    os.rename(DB_PATH, backup_name)
                     print(f" [System] Data Preservation: Renamed old DB to '{backup_name}'.")
                     print(" [System] Creating fresh database with correct schema...")
                     # If we renamed the DB, the new one will be fresh
@@ -112,7 +143,7 @@ def init_db():
         except Exception as e:
             print(f" [System] Warning: Database health check failed ({e}). Proceeding...")
 
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
 
     # 1. Sessions & Messages
@@ -193,7 +224,7 @@ def upsert_user_memory(key: str, value: str, category: str = "auto") -> None:
         if k not in ALLOWED_AUTO_MEMORY_KEYS: k = "misc"
 
     now = datetime.utcnow().isoformat()
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
     c.execute("""
         INSERT INTO user_memory (key, value, category, last_updated)
@@ -207,7 +238,7 @@ def upsert_user_memory(key: str, value: str, category: str = "auto") -> None:
 def delete_user_memory(key: str) -> bool:
     k = _safe_key(key)
     if not k: return False
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
     c.execute("DELETE FROM user_memory WHERE key = ?", (k,))
     rows = c.rowcount
@@ -218,7 +249,7 @@ def delete_user_memory(key: str) -> bool:
 def get_user_memory_value(key: str) -> Optional[str]:
     k = _safe_key(key)
     if not k: return None
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
     c.execute("SELECT value FROM user_memory WHERE key = ?", (k,))
     row = c.fetchone()
@@ -235,7 +266,7 @@ def upsert_user_memory_meta(key: str, meta: Dict[str, Any]) -> None:
 
     meta_json = json.dumps(meta, sort_keys=True, separators=(",", ":"))
     now = datetime.utcnow().isoformat()
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
     c.execute("SELECT created_at FROM user_memory_meta WHERE key = ?", (safe_key,))
     row = c.fetchone()
@@ -250,7 +281,7 @@ def upsert_user_memory_meta(key: str, meta: Dict[str, Any]) -> None:
 def delete_user_memory_meta(key: str) -> bool:
     k = _safe_key(key)
     if not k: return False
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
     c.execute("DELETE FROM user_memory_meta WHERE key = ?", (k,))
     rows = c.rowcount
@@ -264,7 +295,7 @@ def merge_user_memory_meta(key: str, updates: Dict[str, Any]) -> Dict[str, Any]:
 
 def get_user_memory_meta(key: str) -> Optional[Dict[str, Any]]:
     safe_key = _safe_key(key)
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
     c.execute("SELECT meta_json FROM user_memory_meta WHERE key = ?", (safe_key,))
     row = c.fetchone()
@@ -275,7 +306,7 @@ def get_user_memory_meta(key: str) -> Optional[Dict[str, Any]]:
     return None
 
 def get_core_user_memories_with_meta() -> List[Dict[str, Any]]:
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     placeholders = ",".join("?" for _ in TIER_A_KEYS)
@@ -303,7 +334,7 @@ def get_extended_user_memories_with_meta() -> List[Dict[str, Any]]:
     Retrieves all user memories that are NOT in the Tier-A (Identity) set.
     Used for tool-based retrieval and general knowledge.
     """
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     placeholders = ",".join("?" for _ in TIER_A_KEYS)
@@ -333,7 +364,7 @@ def get_extended_user_memories_with_meta() -> List[Dict[str, Any]]:
 def add_vector_memory_item(content: str, embedding: bytes, meta: Dict[str, Any]) -> int:
     meta_json = json.dumps(meta, sort_keys=True, separators=(",", ":"))
     now = datetime.utcnow().isoformat()
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
     c.execute("""
         INSERT INTO vector_memory (content, embedding, meta_json, created_at, last_updated)
@@ -345,7 +376,7 @@ def add_vector_memory_item(content: str, embedding: bytes, meta: Dict[str, Any])
     return row_id
 
 def list_vector_memory_items(limit: int = 5000) -> List[Dict[str, Any]]:
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute("""
@@ -363,7 +394,7 @@ def list_vector_memory_items(limit: int = 5000) -> List[Dict[str, Any]]:
     return results
 
 def delete_vector_memory_item(item_id: int) -> bool:
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
     c.execute("DELETE FROM vector_memory WHERE id = ?", (item_id,))
     rows = c.rowcount
@@ -379,14 +410,14 @@ def add_memory_event(event: str, payload: Dict[str, Any], session_id: Optional[s
     ts = datetime.utcnow().isoformat()
     try: payload_json = json.dumps(payload, sort_keys=True)
     except: payload_json = "{}"
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
     c.execute("INSERT INTO memory_events (ts, session_id, event, payload_json) VALUES (?, ?, ?, ?)", (ts, session_id, event, payload_json))
     conn.commit()
     conn.close()
 
 def get_memory_events(session_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     sql = "SELECT id, ts, session_id, event, payload_json FROM memory_events "
@@ -412,7 +443,7 @@ def get_memory_events(session_id: Optional[str] = None) -> List[Dict[str, Any]]:
 
 def get_app_setting(key: str) -> Optional[str]:
     """Retrieves a single setting value by key."""
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
     c.execute("SELECT value FROM app_settings WHERE key = ?", (key,))
     row = c.fetchone()
@@ -423,7 +454,7 @@ def get_app_setting(key: str) -> Optional[str]:
 def set_app_setting(key: str, value: str) -> None:
     """Upserts a setting value."""
     now = datetime.utcnow().isoformat()
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
     c.execute("""
         INSERT INTO app_settings (key, value, last_updated)
@@ -437,7 +468,7 @@ def set_app_setting(key: str, value: str) -> None:
 
 def delete_app_setting(key: str) -> bool:
     """Deletes a setting key."""
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
     c.execute("DELETE FROM app_settings WHERE key = ?", (key,))
     rows = c.rowcount
@@ -448,7 +479,7 @@ def delete_app_setting(key: str) -> bool:
 
 def get_all_app_settings() -> Dict[str, str]:
     """Retrieves all settings as a dictionary."""
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
     c.execute("SELECT key, value FROM app_settings")
     rows = c.fetchall()
@@ -460,7 +491,7 @@ def get_all_app_settings() -> Dict[str, str]:
 # ------------------------------
 
 def get_recent_sessions(limit: int = 20) -> List[Dict[str, Any]]:
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute("SELECT id, title, created_at FROM sessions ORDER BY created_at DESC LIMIT ?", (limit,))
@@ -470,7 +501,7 @@ def get_recent_sessions(limit: int = 20) -> List[Dict[str, Any]]:
 
 
 def get_chat_history(session_id: str, limit: int = 200) -> List[Dict[str, Any]]:
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute("""
@@ -487,7 +518,7 @@ def get_chat_history(session_id: str, limit: int = 200) -> List[Dict[str, Any]]:
 
 def add_message(session_id: str, role: str, content: str, tokens: int = 0) -> None:
     now = datetime.utcnow().isoformat()
-    conn = sqlite3.connect(DB_NAME)
+    conn = _connect_db()
     c = conn.cursor()
 
     c.execute("INSERT OR IGNORE INTO sessions (id, title, created_at) VALUES (?, ?, ?)",
