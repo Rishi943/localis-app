@@ -72,17 +72,33 @@ RESOURCE_STATIC_DIR = BASE_DIR / "static"      # bundled assets (read-only-ish)
 STATIC_DIR = DATA_DIR / "static"              # persistent copy (writeable)
 
 def _seed_static_assets():
+    """
+    Syncs shipped static assets from RESOURCE_STATIC_DIR into STATIC_DIR.
+    Overwrites shipped assets to apply updates after git pull.
+    Preserves user-owned files (wallpaper.bg, .temp_user_name).
+    """
     STATIC_DIR.mkdir(parents=True, exist_ok=True)
     if not RESOURCE_STATIC_DIR.exists():
         return
-    # Copy only missing files (don’t overwrite user wallpaper, etc.)
+
+    # User-owned files that should not be overwritten
+    USER_OWNED_FILES = {"wallpaper.bg", ".temp_user_name"}
+
     for src in RESOURCE_STATIC_DIR.rglob("*"):
         if src.is_dir():
             continue
         rel = src.relative_to(RESOURCE_STATIC_DIR)
         dst = STATIC_DIR / rel
-        if dst.exists():
+
+        # Skip user-owned files to preserve them
+        if dst.name in USER_OWNED_FILES:
+            # Only copy if it doesn't exist (first-time setup)
+            if not dst.exists():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
             continue
+
+        # Overwrite all other shipped assets (sync updates)
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
 
@@ -142,14 +158,6 @@ def _load_model_internal(model_name: str, n_gpu_layers: int, n_ctx: int):
 app = FastAPI(title="Localis")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-
-register_setup_wizard(app, MODELS_DIR)
-register_updater(app, PROJECT_ROOT)
-
-
-# --- Setup Wizard + Updater (new, minimal integration) ---
-from .setup_wizard import register_setup_wizard
-from .updater import register_updater
 
 register_setup_wizard(app, MODELS_DIR)
 register_updater(app, PROJECT_ROOT)

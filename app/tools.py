@@ -8,9 +8,23 @@ from typing import List, Dict, Any, Optional
 # ------------------------------
 # Load Secrets
 # ------------------------------
-# Resolve path: tools.py -> app/ -> project_root/ -> secret.env
-base_dir = Path(__file__).resolve().parent.parent
-load_dotenv(dotenv_path=base_dir / "secret.env")
+# Priority order:
+# 1. LOCALIS_DATA_DIR/secret.env if LOCALIS_DATA_DIR is set and file exists
+# 2. Fallback to repo root secret.env
+def _load_secrets():
+    """Load secrets from the appropriate location based on environment."""
+    data_dir_env = os.getenv("LOCALIS_DATA_DIR")
+    if data_dir_env:
+        data_dir_path = Path(data_dir_env) / "secret.env"
+        if data_dir_path.exists():
+            load_dotenv(dotenv_path=data_dir_path)
+            return
+
+    # Fallback: repo root secret.env
+    base_dir = Path(__file__).resolve().parent.parent
+    load_dotenv(dotenv_path=base_dir / "secret.env")
+
+_load_secrets()
 
 # Note: We rely on os.getenv() inside functions to ensure fresh values
 # if the environment changes at runtime, rather than caching module-level constants.
