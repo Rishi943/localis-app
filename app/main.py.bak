@@ -14,9 +14,8 @@ LLAMA_SERVER_URL: Final[str] = os.getenv("LLAMA_SERVER_URL", "http://127.0.0.1:8
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_TEMPLATE_PATH = BASE_DIR / "templates" / "index.html"
 
-# --------- SEARCH API KEYS (HARDCODED FOR NOW) ---------
-BRAVE_API_KEY = "BSAG1cwUr8ssX73a16T0Cm4Dc5eD8Ls"
-TAVILY_API_KEY = "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"
+# --------- SEARCH API KEYS --------
+
 
 if not BRAVE_API_KEY:
     raise RuntimeError(
