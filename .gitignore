@@ -1,3 +1,4 @@
+# Python cache and build artifacts
 __pycache__/
 *.pyc
 *.log
@@ -5,3 +6,19 @@ __pycache__/
 venv/
 dist/
 build/
+
+# Runtime database
+chat_history.db*
+
+# Model files
+models/**
+
+# Data directory
+data/**
+
+# Environment configuration
+secret.env
+
+# User-uploaded static assets
+app/static/wallpaper.bg
+app/static/.temp_user_name
