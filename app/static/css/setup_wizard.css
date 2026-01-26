@@ -1,0 +1,86 @@
+/* app/static/css/setup_wizard.css */
+#setupw-overlay {
+position: fixed;
+inset: 0;
+background: var(--bg-overlay);
+z-index: 99999;
+display: none;
+align-items: center;
+justify-content: center;
+padding: 24px;
+}
+
+#setupw-card {
+width: min(720px, 96vw);
+background: var(--bg-panel);
+border: 1px solid var(--border-subtle);
+border-radius: var(--radius-lg);
+box-shadow: var(--shadow-overlay);
+padding: 18px 18px 14px;
+color: var(--text-primary);
+font-family: var(--font-sans);
+}
+
+#setupw-title {
+font-size: 1.1rem;
+margin: 0 0 10px 0;
+letter-spacing: 0.2px;
+}
+
+#setupw-sub {
+margin: 0 0 14px 0;
+color: var(--text-secondary);
+font-size: 0.92rem;
+line-height: 1.35;
+}
+
+#setupw-path {
+font-family: var(--font-mono);
+font-size: 0.85rem;
+padding: 10px;
+background: rgba(255,255,255,0.03);
+border: 1px solid var(--border-subtle);
+border-radius: var(--radius-md);
+word-break: break-all;
+}
+
+#setupw-actions {
+display: flex;
+flex-wrap: wrap;
+gap: 10px;
+margin-top: 14px;
+}
+
+.setupw-btn {
+    border: 1px solid var(--border-subtle);
+    background: rgba(255,255,255,0.02);
+    color: var(--text-primary);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    cursor: pointer;
+}
+
+.setupw-btn.primary {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    border-color: transparent;
+}
+
+.setupw-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#setupw-status {
+margin-top: 12px;
+font-size: 0.9rem;
+color: var(--text-secondary);
+white-space: pre-wrap;
+}
+
+#setupw-models {
+margin-top: 10px;
+font-family: var(--font-mono);
+font-size: 0.85rem;
+color: var(--text-secondary);
+}

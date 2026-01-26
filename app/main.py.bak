@@ -1,0 +1,265 @@
+import math
+import os
+from pathlib import Path
+from typing import Any, Final
+
+import httpx
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
+
+# URL of llama.cpp server
+LLAMA_SERVER_URL: Final[str] = os.getenv("LLAMA_SERVER_URL", "http://127.0.0.1:8080")
+
+BASE_DIR = Path(__file__).resolve().parent
+INDEX_TEMPLATE_PATH = BASE_DIR / "templates" / "index.html"
+
+# --------- SEARCH API KEYS (HARDCODED FOR NOW) ---------
+BRAVE_API_KEY = "BSAG1cwUr8ssX73a16T0Cm4Dc5eD8Ls"
+TAVILY_API_KEY = "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"
+
+if not BRAVE_API_KEY:
+    raise RuntimeError(
+        "BRAVE_API_KEY is empty. Set it to your Brave Search API key in main.py."
+    )
+
+if not TAVILY_API_KEY:
+    raise RuntimeError(
+        "TAVILY_API_KEY is empty. Set it to your Tavily Search API key in main.py."
+    )
+
+
+# --------- SEARCH HELPERS ---------
+
+async def web_search_brave(query: str) -> str:
+    """
+    Basic Brave web search: returns up to 5 snippets.
+    """
+    url = "https://api.search.brave.com/res/v1/web/search"
+
+    headers = {
+        "X-Subscription-Token": str(BRAVE_API_KEY),
+        "Accept": "application/json",
+    }
+
+    params = {"q": query, "count": 5}
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(url, headers=headers, params=params)
+        r.raise_for_status()
+        data = r.json()
+
+    results: list[str] = []
+    for item in data.get("web", {}).get("results", []):
+        snippet = item.get("description") or item.get("title")
+        if snippet:
+            results.append(snippet)
+
+    if not results:
+        return "No Brave search results."
+
+    return "\n".join(results[:5])
+
+
+async def web_search_tavily(query: str) -> str:
+    """
+    Tavily web search: uses Tavily's Search API and returns answer + top contents.
+    """
+    url = "https://api.tavily.com/search"
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {TAVILY_API_KEY}",
+    }
+
+    payload = {
+        "query": query,
+        "max_results": 5,
+        "search_depth": "basic",
+        "include_answer": True,
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        r = await client.post(url, headers=headers, json=payload)
+        r.raise_for_status()
+        data = r.json()
+
+    parts: list[str] = []
+
+    answer = data.get("answer")
+    if answer:
+        parts.append(f"Answer: {answer}")
+
+    for item in data.get("results", [])[:5]:
+        content = item.get("content")
+        if content:
+            parts.append(content)
+
+    if not parts:
+        return "No Tavily search results."
+
+    return "\n\n".join(parts)
+
+
+def load_index_template() -> str:
+    try:
+        return INDEX_TEMPLATE_PATH.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "Missing templates/index.html. Did you forget to copy the frontend template?"
+        ) from exc
+
+
+INDEX_HTML: Final[str] = load_index_template()
+
+app = FastAPI(title="Local GPU AI Assistant")
+
+
+# ==============================
+# REQUEST/RESPONSE MODELS
+# ==============================
+
+class ChatRequest(BaseModel):
+    prompt: str = Field(..., min_length=1)
+    max_tokens: int = Field(256, ge=32, le=2048)
+    temperature: float = Field(0.7, ge=0.0, le=2.0)
+    top_p: float = Field(0.9, gt=0.0, le=1.0)
+    reasoning: bool = Field(False)
+    search_engine: str | None = Field(
+        "brave",
+        description="Which web search engine to use when prompt starts with 'search:'. "
+                    "Options: 'brave', 'tavily'.",
+    )
+
+
+class ChatResponse(BaseModel):
+    response: str
+    tokens_evaluated: int | None = None
+    tokens_predicted: int | None = None
+    total_tokens: int | None = None
+
+
+# ==============================
+# HEALTH CHECK
+# ==============================
+
+@app.get("/health")
+async def health():
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{LLAMA_SERVER_URL}/health")
+
+        if r.status_code == 404:
+            return {"status": "ok (llama.cpp running, but /health not found)"}
+
+        r.raise_for_status()
+        return {"status": "ok", "llama_server": r.json()}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"llama.cpp not reachable: {e}")
+
+
+# ==============================
+# MAIN CHAT ENDPOINT
+# ==============================
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat(req: ChatRequest):
+    """
+    Main endpoint for your local assistant.
+    """
+
+    # Optional chain-of-thought toggle
+    if req.reasoning:
+        system_prompt = "You are a helpful assistant. Think step by step."
+    else:
+        system_prompt = "You are a helpful assistant."
+
+    user_prompt = req.prompt
+    engine = (req.search_engine or "brave").lower()
+
+    # Handle web search if prompt starts with "search:"
+    if user_prompt.lower().startswith("search:"):
+        query = user_prompt[7:].strip()
+
+        try:
+            if engine == "tavily":
+                search_results = await web_search_tavily(query)
+                engine_name = "Tavily"
+            else:
+                # default to Brave for anything else
+                search_results = await web_search_brave(query)
+                engine_name = "Brave"
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Error during {engine} web search: {e}",
+            )
+
+        user_prompt = (
+            f"Search engine: {engine_name}\n"
+            f"Search query: {query}\n"
+            f"Search results:\n{search_results}\n\n"
+            f"Based on the above, answer the user question clearly."
+        )
+
+    templated = (
+        "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
+        + system_prompt
+        + "<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n"
+        + user_prompt
+        + "<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+    )
+
+    payload = {
+        "prompt": templated,
+        "n_predict": req.max_tokens,
+        "temperature": req.temperature,
+        "top_p": req.top_p,
+        "stop": ["<|eot_id|>"],
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            r = await client.post(f"{LLAMA_SERVER_URL}/completion", json=payload)
+        r.raise_for_status()
+
+        data = r.json()
+
+        # llama.cpp returns either "content" or "completion"
+        text = data.get("content") or data.get("completion")
+        if not text:
+            raise ValueError(f"Unexpected llama.cpp response: {data}")
+
+        # Token usage extraction (safe)
+        tokens_evaluated = data.get("tokens_evaluated") or data.get("prompt_tokens")
+        tokens_predicted = data.get("tokens_predicted") or data.get("completion_tokens")
+
+        total_tokens = data.get("total_tokens")
+        if total_tokens is None and tokens_evaluated and tokens_predicted:
+            try:
+                total_tokens = int(tokens_evaluated) + int(tokens_predicted)
+            except Exception:
+                total_tokens = None
+
+        return ChatResponse(
+            response=text,
+            tokens_evaluated=tokens_evaluated,
+            tokens_predicted=tokens_predicted,
+            total_tokens=total_tokens,
+        )
+
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Error talking to llama.cpp: {e}")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================
+# FRONTEND SERVE
+# ==============================
+
+@app.get("/", response_class=HTMLResponse)
+async def index():
+    return INDEX_HTML

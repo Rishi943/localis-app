@@ -1,0 +1,52 @@
+/* app/static/css/updater_ui.css */
+#upd-overlay {
+position: fixed;
+inset: 0;
+background: var(--bg-overlay);
+z-index: 99998;
+display: none;
+align-items: center;
+justify-content: center;
+padding: 24px;
+}
+
+#upd-card {
+width: min(720px, 96vw);
+background: var(--bg-panel);
+border: 1px solid var(--border-subtle);
+border-radius: var(--radius-lg);
+box-shadow: var(--shadow-overlay);
+padding: 18px;
+color: var(--text-primary);
+font-family: var(--font-sans);
+}
+
+#upd-title { margin: 0 0 10px 0; font-size: 1.05rem; }
+
+#upd-body {
+font-family: var(--font-mono);
+font-size: 0.86rem;
+color: var(--text-secondary);
+white-space: pre-wrap;
+border: 1px solid var(--border-subtle);
+background: rgba(255,255,255,0.03);
+border-radius: var(--radius-md);
+padding: 10px;
+}
+
+#upd-actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+
+.upd-btn {
+    border: 1px solid var(--border-subtle);
+    background: rgba(255,255,255,0.02);
+    color: var(--text-primary);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    cursor: pointer;
+}
+
+.upd-btn.primary {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    border-color: transparent;
+}

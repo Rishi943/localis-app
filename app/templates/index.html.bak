@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Local GPU AI Assistant</title>
+    <style>
+        * { box-sizing: border-box; }
+        :root { color-scheme: dark; }
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            display: flex;
+            align-items: stretch;
+            justify-content: center;
+            height: 100vh;
+            background: var(--bg-color);
+            color: var(--text-color);
+            transition: background 0.3s ease, color 0.3s ease;
+            --bg-color: #0b1020;
+            --text-color: #f5f5f5;
+            --panel-border: #222741;
+            --panel-bg: radial-gradient(circle at top left, #181d35, #050712);
+            --badge-border: #3a3f5c;
+            --input-bg: #050712;
+            --textarea-bg: #020617;
+            --textarea-border: #374151;
+            --assistant-bg: #111827;
+            --assistant-border: #374151;
+            --scrollbar-thumb: rgba(148, 163, 184, 0.4);
+        }
+        body.theme-dark { color-scheme: dark; }
+        body.theme-light {
+            color-scheme: light;
+            --bg-color: #f5f5f5;
+            --text-color: #0f172a;
+            --panel-border: #d1d5db;
+            --panel-bg: radial-gradient(circle at top left, #ffffff, #e5e7eb);
+            --badge-border: #cbd5f5;
+            --input-bg: #ffffff;
+            --textarea-bg: #f8fafc;
+            --textarea-border: #cbd5f5;
+            --assistant-bg: #f1f5f9;
+            --assistant-border: #cbd5f5;
+            --scrollbar-thumb: rgba(148, 163, 184, 0.6);
+        }
+        .app {
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            gap: 12px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .controls-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        .title {
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+        .badge {
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--badge-border);
+            font-size: 0.75rem;
+            opacity: 0.85;
+        }
+        .chat-box {
+            flex: 1;
+            border-radius: 14px;
+            border: 1px solid var(--panel-border);
+            background: var(--panel-bg);
+            padding: 12px;
+            overflow-y: auto;
+            transition: background 0.3s ease, border-color 0.3s ease;
+        }
+        .message {
+            max-width: 80%;
+            padding: 8px 12px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+        }
+        .message.user {
+            margin-left: auto;
+            background: #2563eb;
+        }
+        .message.assistant {
+            margin-right: auto;
+            background: var(--assistant-bg);
+            border: 1px solid var(--assistant-border);
+        }
+        .label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            opacity: 0.6;
+            margin-bottom: 3px;
+        }
+        .message-content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 0.95rem;
+            line-height: 1.4;
+        }
+        .input-row {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border-radius: 14px;
+            border: 1px solid var(--panel-border);
+            padding: 10px;
+            background: var(--input-bg);
+            transition: background 0.3s ease, border-color 0.3s ease;
+        }
+        textarea {
+            width: 100%;
+            resize: vertical;
+            min-height: 60px;
+            max-height: 160px;
+            padding: 8px;
+            border-radius: 10px;
+            border: 1px solid var(--textarea-border);
+            background: var(--textarea-bg);
+            color: inherit;
+            font-size: 0.95rem;
+            transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #2563eb;
+        }
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            opacity: 0.9;
+        }
+        input[type="range"] {
+            width: 100px;
+        }
+        button {
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+        button:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+        button.primary {
+            border: none;
+            border-radius: 999px;
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            background: #2563eb;
+            color: white;
+        }
+        button.primary:focus-visible,
+        .theme-toggle:focus-visible {
+            outline: 2px solid #2563eb;
+            outline-offset: 2px;
+        }
+        .theme-toggle {
+            border-radius: 999px;
+            border: 1px solid var(--panel-border);
+            background: transparent;
+            color: inherit;
+            padding: 6px 12px;
+            font-size: 0.85rem;
+        }
+        .theme-toggle:hover {
+            background: rgba(148, 163, 184, 0.12);
+        }
+        body.theme-light .theme-toggle:hover {
+            background: rgba(15, 23, 42, 0.08);
+        }
+        .status {
+            font-size: 0.75rem;
+            opacity: 0.7;
+        }
+        .chat-box::-webkit-scrollbar {
+            width: 8px;
+        }
+        .chat-box::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb);
+            border-radius: 999px;
+        }
+        @media (max-width: 600px) {
+            .app {
+                padding: 12px;
+            }
+            .message {
+                max-width: 100%;
+            }
+        }
+        /* Optional: make select look consistent */
+        select {
+            background: var(--textarea-bg);
+            color: inherit;
+            border-radius: 8px;
+            border: 1px solid var(--textarea-border);
+            padding: 3px 6px;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body class="theme-dark">
+<div class="app">
+    <div class="header">
+        <div class="title">Local GPU AI Assistant</div>
+        <div class="controls-row">
+            <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">🌙</button>
+            <div class="badge">FastAPI · llama.cpp</div>
+        </div>
+    </div>
+
+    <div id="chat" class="chat-box"></div>
+
+    <div class="input-row">
+        <textarea id="prompt" placeholder="Say hello to your model...&#10;Use “search: your question” to trigger web search."></textarea>
+        <div class="controls">
+            <div class="slider-group">
+                <span>Temperature</span>
+                <input id="temperature" type="range" min="0" max="20" value="7" />
+                <span id="temp-value">0.7</span>
+            </div>
+            <div class="slider-group">
+                <span>Max tokens</span>
+                <input id="max_tokens" type="range" min="32" max="1024" step="32" value="256" />
+                <span id="tokens-value">256</span>
+            </div>
+            <div class="slider-group">
+                <span>Search engine</span>
+                <select id="search_engine">
+                    <option value="brave" selected>Brave</option>
+                    <option value="tavily">Tavily</option>
+                </select>
+            </div>
+            <button id="send" class="primary">Send</button>
+            <span id="status" class="status"></span>
+        </div>
+    </div>
+</div>
+
+<script>
+    const chatEl = document.getElementById("chat");
+    const promptEl = document.getElementById("prompt");
+    const tempEl = document.getElementById("temperature");
+    const tempValueEl = document.getElementById("temp-value");
+    const maxTokensEl = document.getElementById("max_tokens");
+    const tokensValueEl = document.getElementById("tokens-value");
+    const sendBtn = document.getElementById("send");
+    const statusEl = document.getElementById("status");
+    const themeToggleBtn = document.getElementById("theme-toggle");
+    const searchEngineEl = document.getElementById("search_engine");
+
+    const motionMedia = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let prefersReducedMotion = motionMedia.matches;
+    const updateMotionPreference = (event) => {
+        prefersReducedMotion = event.matches;
+    };
+    if (typeof motionMedia.addEventListener === "function") {
+        motionMedia.addEventListener("change", updateMotionPreference);
+    } else if (typeof motionMedia.addListener === "function") {
+        motionMedia.addListener(updateMotionPreference);
+    }
+
+    function applyTheme(theme) {
+        const normalized = theme === "light" ? "light" : "dark";
+        document.body.classList.toggle("theme-light", normalized === "light");
+        document.body.classList.toggle("theme-dark", normalized === "dark");
+        themeToggleBtn.textContent = normalized === "light" ? "☀️" : "🌙";
+        localStorage.setItem("theme", normalized);
+    }
+
+    const savedTheme = localStorage.getItem("theme");
+    applyTheme(savedTheme);
+
+    themeToggleBtn.addEventListener("click", () => {
+        const nextTheme = document.body.classList.contains("theme-light") ? "dark" : "light";
+        applyTheme(nextTheme);
+    });
+
+    tempEl.addEventListener("input", () => {
+        tempValueEl.textContent = (tempEl.value / 10).toFixed(1);
+    });
+
+    maxTokensEl.addEventListener("input", () => {
+        tokensValueEl.textContent = maxTokensEl.value;
+    });
+
+    function typeText(element, text) {
+        if (!text) {
+            element.textContent = "";
+            return;
+        }
+        if (prefersReducedMotion) {
+            element.textContent = text;
+            chatEl.scrollTop = chatEl.scrollHeight;
+            return;
+        }
+        let index = 0;
+        const maxIndex = text.length;
+        const tick = () => {
+            element.textContent = text.slice(0, index + 1);
+            chatEl.scrollTop = chatEl.scrollHeight;
+            index += 1;
+            if (index < maxIndex) {
+                setTimeout(tick, 18);
+            }
+        };
+        tick();
+    }
+
+    function addMessage(role, text, options = {}) {
+        const wrapper = document.createElement("div");
+        wrapper.classList.add("message", role);
+
+        const label = document.createElement("div");
+        label.classList.add("label");
+        label.textContent = role === "user" ? "You" : "Assistant";
+
+        const content = document.createElement("div");
+        content.classList.add("message-content");
+
+        if (role === "assistant") {
+            typeText(content, text);
+        } else {
+            content.textContent = text;
+        }
+
+        wrapper.appendChild(label);
+        wrapper.appendChild(content);
+
+        // Small meta line under assistant messages (tokens, etc.), if provided
+        if (role === "assistant" && options.tokenUsageText) {
+            const meta = document.createElement("div");
+            meta.classList.add("message-meta");
+            meta.textContent = options.tokenUsageText;
+            wrapper.appendChild(meta);
+        }
+
+        chatEl.appendChild(wrapper);
+        chatEl.scrollTop = chatEl.scrollHeight;
+
+        return wrapper;
+    }
+
+    function normalizeNumber(value) {
+        if (typeof value === "number" && Number.isFinite(value)) {
+            return value;
+        }
+        if (typeof value === "string" && value.trim() !== "") {
+            const parsed = Number(value);
+            if (Number.isFinite(parsed)) {
+                return parsed;
+            }
+        }
+        return null;
+    }
+
+    function extractTokenUsage(data) {
+        if (!data || typeof data !== "object") return null;
+        const evaluatedKeys = ["tokens_evaluated", "prompt_tokens", "tokens_input"];
+        const predictedKeys = ["tokens_predicted", "completion_tokens", "tokens_output"];
+
+        let evaluated = null;
+        for (const key of evaluatedKeys) {
+            const value = normalizeNumber(data[key]);
+            if (value !== null) {
+                evaluated = value;
+                break;
+            }
+        }
+
+        let predicted = null;
+        for (const key of predictedKeys) {
+            const value = normalizeNumber(data[key]);
+            if (value !== null) {
+                predicted = value;
+                break;
+            }
+        }
+
+        const totalCandidate = normalizeNumber(data.total_tokens);
+        const total = totalCandidate !== null
+            ? totalCandidate
+            : evaluated !== null && predicted !== null
+                ? evaluated + predicted
+                : null;
+
+        if (evaluated === null && predicted === null && total === null) {
+            return null;
+        }
+
+        const parts = [];
+        if (evaluated !== null) parts.push(`Prompt: ${evaluated}`);
+        if (predicted !== null) parts.push(`Completion: ${predicted}`);
+        if (total !== null) parts.push(`Total: ${total}`);
+
+        return {
+            text: `Tokens · ${parts.join(" · ")}`,
+            evaluated,
+            predicted,
+            total,
+        };
+    }
+
+    function clearChat() {
+        chatEl.innerHTML = "";
+        statusEl.textContent = "";
+        promptEl.value = "";
+        promptEl.focus();
+    }
+
+    async function sendMessage() {
+        const prompt = promptEl.value.trim();
+        if (!prompt) return;
+
+        addMessage("user", prompt);
+        promptEl.value = "";
+        statusEl.textContent = "Thinking...";
+        sendBtn.disabled = true;
+
+        try {
+            const temperature = parseFloat((tempEl.value / 10).toFixed(1));
+            const max_tokens = parseInt(maxTokensEl.value, 10);
+            const search_engine = searchEngineEl.value;
+
+            const res = await fetch("/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    prompt,
+                    temperature,
+                    max_tokens,
+                    search_engine
+                }),
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || ("HTTP " + res.status));
+            }
+
+            const data = await res.json();
+            const tokenUsage = extractTokenUsage(data);
+            const usageText = tokenUsage ? tokenUsage.text : null;
+
+            addMessage("assistant", data.response || "[no response field]", {
+                tokenUsageText: usageText,
+            });
+
+            statusEl.textContent = usageText || "";
+        } catch (err) {
+            console.error(err);
+            statusEl.textContent = "Error: " + err.message;
+        } finally {
+            sendBtn.disabled = false;
+        }
+    }
+
+    sendBtn.addEventListener("click", sendMessage);
+    promptEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    document.addEventListener("keydown", (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "l") {
+            e.preventDefault();
+            clearChat();
+        }
+    });
+</script>
+</body>
+</html>
