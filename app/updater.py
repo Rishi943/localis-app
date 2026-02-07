@@ -1,6 +1,7 @@
 # app/updater.py
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -11,25 +12,72 @@ from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/update", tags=["update"])
 
+# Cache for git executable path
+_GIT_EXE: Optional[str] = None
+
+
+def _get_git_exe() -> str:
+    """
+    Returns the git executable path from LOCALIS_GIT_EXE environment variable.
+    Falls back to 'git' if not set or if the specified path doesn't exist.
+    Caches the result for performance.
+    """
+    global _GIT_EXE
+
+    if _GIT_EXE is None:
+        git_path = os.environ.get('LOCALIS_GIT_EXE', 'git')
+
+        # Validate absolute paths - if specified path doesn't exist, fall back to 'git'
+        if git_path != 'git' and not Path(git_path).exists():
+            print(f"[UPDATER] Warning: LOCALIS_GIT_EXE points to non-existent path: {git_path}")
+            print("[UPDATER] Falling back to system 'git'")
+            _GIT_EXE = 'git'
+        else:
+            _GIT_EXE = git_path
+            if git_path != 'git':
+                print(f"[UPDATER] Using bundled git: {git_path}")
+
+    return _GIT_EXE
+
+
 def register_updater(app, project_root: Path) -> None:
     app.state.project_root = str(project_root)
     app.include_router(router)
 
+
 def _root(request: Request) -> Path:
     return Path(request.app.state.project_root)
 
+
 def _git_available() -> bool:
+    """
+    Checks if git is available by running 'git --version'.
+    Uses the git executable specified by LOCALIS_GIT_EXE if set.
+    """
     try:
-        subprocess.run(["git", "--version"], capture_output=True, text=True, check=True)
+        git_exe = _get_git_exe()
+        subprocess.run([git_exe, "--version"], capture_output=True, text=True, check=True)
         return True
-    except Exception:
+    except Exception as e:
+        print(f"[UPDATER] Git not available: {e}")
         return False
 
+
 def _run_git(root: Path, args: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(["git"] + args, cwd=str(root), capture_output=True, text=True)
+    """
+    Runs a git command in the specified directory.
+    Uses the git executable specified by LOCALIS_GIT_EXE if set.
+    """
+    git_exe = _get_git_exe()
+    return subprocess.run([git_exe] + args, cwd=str(root), capture_output=True, text=True)
+
 
 @router.get("/status")
 def update_status(request: Request) -> Dict[str, Any]:
+    """
+    Returns the current git repository status including branch, commits ahead/behind,
+    and whether the working tree is dirty.
+    """
     root = _root(request)
 
     if not _git_available():
@@ -76,11 +124,17 @@ def update_status(request: Request) -> Dict[str, Any]:
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
 
+
 class ApplyUpdateRequest(BaseModel):
     ff_only: bool = Field(default=True)
 
+
 @router.post("/apply")
 def apply_update(req: ApplyUpdateRequest, request: Request) -> Dict[str, Any]:
+    """
+    Applies pending git updates by pulling from the upstream branch.
+    Requires a clean working tree and uses fast-forward-only merge by default.
+    """
     root = _root(request)
 
     if not _git_available():
