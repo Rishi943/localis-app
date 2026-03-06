@@ -28,17 +28,22 @@ def _resolve_db_path() -> str:
         return "chat_history.db"
 
 DB_PATH = _resolve_db_path()
+# DB_NAME is the canonical path (can be overridden by main.py)
+# DB_NAME and DB_PATH must stay in sync for backward compatibility
+DB_NAME = DB_PATH
 
 def _ensure_db_directory():
     """Ensures the parent directory of the database exists."""
-    db_dir = os.path.dirname(DB_PATH)
+    # Use DB_NAME as canonical path (main.py may override it)
+    db_dir = os.path.dirname(DB_NAME)
     if db_dir and not os.path.exists(db_dir):
         os.makedirs(db_dir, exist_ok=True)
 
 def _connect_db() -> sqlite3.Connection:
     """Creates a database connection, ensuring the directory exists first."""
     _ensure_db_directory()
-    return sqlite3.connect(DB_PATH)
+    # Use DB_NAME as canonical path (supports main.py override)
+    return sqlite3.connect(DB_NAME)
 
 # ------------------------------
 # Strict Auto-Memory Schema
@@ -191,6 +196,71 @@ def init_db():
     c.execute("""
         CREATE TABLE IF NOT EXISTS app_settings (
             key TEXT PRIMARY KEY, value TEXT, last_updated TEXT
+        )
+    """)
+
+    # 7. RAG Files (Phase 0A + Phase 1A)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS rag_files (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            original_name TEXT NOT NULL,
+            stored_path TEXT NOT NULL,
+            mime TEXT,
+            size_bytes INTEGER,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            extracted_path TEXT,
+            chunks_path TEXT,
+            page_count INTEGER,
+            char_count INTEGER,
+            chunk_count INTEGER,
+            error TEXT,
+            updated_at TEXT
+        )
+    """)
+
+    # Safe migration: Add new columns if they don't exist (Phase 1A)
+    c.execute("PRAGMA table_info(rag_files)")
+    existing_columns = {row[1] for row in c.fetchall()}
+
+    new_columns = {
+        'extracted_path': 'TEXT',
+        'chunks_path': 'TEXT',
+        'page_count': 'INTEGER',
+        'char_count': 'INTEGER',
+        'chunk_count': 'INTEGER',
+        'error': 'TEXT',
+        'updated_at': 'TEXT',
+        'vector_count': 'INTEGER',
+        'indexed_at': 'TEXT',
+        'index_backend': 'TEXT',
+        'index_collection': 'TEXT',
+        'is_active': 'INTEGER',
+        'content_sha256': 'TEXT'
+    }
+
+    for col_name, col_type in new_columns.items():
+        if col_name not in existing_columns:
+            c.execute(f"ALTER TABLE rag_files ADD COLUMN {col_name} {col_type}")
+            print(f" [Database] Added column '{col_name}' to rag_files table")
+
+
+
+    # Create UNIQUE INDEX on (session_id, content_sha256) for deduplication
+    c.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_rag_session_sha256
+        ON rag_files(session_id, content_sha256)
+        WHERE content_sha256 IS NOT NULL
+    """)
+
+    # Create RAG session settings table
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS rag_session_settings (
+            session_id TEXT PRIMARY KEY,
+            rag_enabled INTEGER NOT NULL DEFAULT 1,
+            auto_index INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT
         )
     """)
 
@@ -500,17 +570,33 @@ def get_recent_sessions(limit: int = 20) -> List[Dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
-def get_chat_history(session_id: str, limit: int = 200) -> List[Dict[str, Any]]:
+def get_chat_history(session_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    """Get chat history, optionally limited to N most recent messages"""
     conn = _connect_db()
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute("""
-        SELECT role, content, timestamp, tokens
-        FROM messages
-        WHERE session_id = ?
-        ORDER BY timestamp ASC
-        LIMIT ?
-    """, (session_id, limit))
+
+    if limit:
+        # Get N most recent messages (reversed to maintain chronological order)
+        c.execute("""
+            SELECT * FROM (
+                SELECT role, content, timestamp, tokens
+                FROM messages
+                WHERE session_id = ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+            )
+            ORDER BY timestamp ASC
+        """, (session_id, limit))
+    else:
+        # Get all messages
+        c.execute("""
+            SELECT role, content, timestamp, tokens
+            FROM messages
+            WHERE session_id = ?
+            ORDER BY timestamp ASC
+        """, (session_id,))
+
     rows = c.fetchall()
     conn.close()
     return [dict(row) for row in rows]
@@ -529,3 +615,344 @@ def add_message(session_id: str, role: str, content: str, tokens: int = 0) -> No
 
     conn.commit()
     conn.close()
+
+
+def update_session_title(session_id: str, title: str) -> None:
+    """Update the title of a session."""
+    conn = _connect_db()
+    c = conn.cursor()
+    c.execute("UPDATE sessions SET title = ? WHERE id = ?", (title, session_id))
+    conn.commit()
+    conn.close()
+
+
+def get_session_title(session_id: str) -> Optional[str]:
+    """Get the title of a session."""
+    conn = _connect_db()
+    c = conn.cursor()
+    c.execute("SELECT title FROM sessions WHERE id = ?", (session_id,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def delete_session(session_id: str) -> bool:
+    """Delete session, its messages, and its RAG file records."""
+    conn = _connect_db()
+    c = conn.cursor()
+    c.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+    c.execute("DELETE FROM rag_files WHERE session_id = ?", (session_id,))
+    c.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    deleted = c.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted
+
+
+# ------------------------------
+# RAG Files Operations (Phase 0A)
+# ------------------------------
+
+def rag_add_file(file_dict: Dict[str, Any]) -> None:
+    """
+    Adds a RAG file record to the database.
+    Expects a dict with keys: id, session_id, original_name, stored_path, mime, size_bytes, status, created_at
+    """
+    conn = _connect_db()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO rag_files (id, session_id, original_name, stored_path, mime, size_bytes, status, created_at, content_sha256)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        file_dict["id"],
+        file_dict["session_id"],
+        file_dict["original_name"],
+        file_dict["stored_path"],
+        file_dict.get("mime"),
+        file_dict.get("size_bytes"),
+        file_dict["status"],
+        file_dict["created_at"],
+        file_dict.get("content_sha256")
+    ))
+    conn.commit()
+    conn.close()
+
+
+def rag_list_files(session_id: str) -> List[Dict[str, Any]]:
+    """
+    Lists all RAG files for a given session, ordered by created_at ASC.
+    Includes extraction metadata (Phase 1A+).
+    """
+    conn = _connect_db()
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("""
+        SELECT id, session_id, original_name, stored_path, mime, size_bytes, status, created_at,
+               extracted_path, chunks_path, page_count, char_count, chunk_count, error, updated_at,
+               vector_count, indexed_at, index_backend, index_collection, is_active, content_sha256
+        FROM rag_files
+        WHERE session_id = ?
+        ORDER BY created_at ASC
+    """, (session_id,))
+    rows = c.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def rag_get_file(file_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieves a single RAG file record by ID.
+    Includes extraction metadata (Phase 1A+).
+    """
+    conn = _connect_db()
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("""
+        SELECT id, session_id, original_name, stored_path, mime, size_bytes, status, created_at,
+               extracted_path, chunks_path, page_count, char_count, chunk_count, error, updated_at
+        FROM rag_files
+        WHERE id = ?
+    """, (file_id,))
+    row = c.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+
+def rag_find_file_by_sha256(session_id: str, sha256: str) -> Optional[Dict[str, Any]]:
+    """
+    Find a file by content SHA-256 within a session.
+    Used for deduplication. Returns None if not found.
+    """
+    conn = _connect_db()
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("""
+        SELECT id, session_id, original_name, stored_path, mime, size_bytes, status, created_at,
+               extracted_path, chunks_path, page_count, char_count, chunk_count, error, updated_at,
+               vector_count, indexed_at, index_backend, index_collection, is_active, content_sha256, content_sha256
+        FROM rag_files
+        WHERE session_id = ? AND content_sha256 = ?
+    """, (session_id, sha256))
+    row = c.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def rag_delete_file(file_id: str) -> bool:
+    """
+    Deletes a RAG file record from the database by ID.
+    Returns True if a row was deleted, False otherwise.
+    """
+    conn = _connect_db()
+    c = conn.cursor()
+    c.execute("DELETE FROM rag_files WHERE id = ?", (file_id,))
+    rows = c.rowcount
+    conn.commit()
+    conn.close()
+    return rows > 0
+
+
+def rag_update_status(file_id: str, status: str) -> bool:
+    """
+    Updates the status of a RAG file.
+    Returns True if a row was updated, False otherwise.
+    """
+    now = datetime.utcnow().isoformat()
+    conn = _connect_db()
+    c = conn.cursor()
+    c.execute("""
+        UPDATE rag_files
+        SET status = ?, updated_at = ?
+        WHERE id = ?
+    """, (status, now, file_id))
+    rows = c.rowcount
+    conn.commit()
+    conn.close()
+    return rows > 0
+
+
+def rag_update_extraction(
+    file_id: str,
+    extracted_path: str,
+    page_count: int,
+    char_count: int,
+    status: str = "extracted"
+) -> bool:
+    """
+    Updates RAG file with extraction metadata.
+    Clears any previous error.
+    Returns True if a row was updated, False otherwise.
+    """
+    now = datetime.utcnow().isoformat()
+    conn = _connect_db()
+    c = conn.cursor()
+    c.execute("""
+        UPDATE rag_files
+        SET extracted_path = ?,
+            page_count = ?,
+            char_count = ?,
+            status = ?,
+            error = NULL,
+            updated_at = ?
+        WHERE id = ?
+    """, (extracted_path, page_count, char_count, status, now, file_id))
+    rows = c.rowcount
+    conn.commit()
+    conn.close()
+    return rows > 0
+
+
+def rag_set_error(file_id: str, error_message: str, status: str = "error") -> bool:
+    """
+    Sets error message and status for a RAG file.
+    Returns True if a row was updated, False otherwise.
+    """
+    now = datetime.utcnow().isoformat()
+    conn = _connect_db()
+    c = conn.cursor()
+    c.execute("""
+        UPDATE rag_files
+        SET error = ?,
+            status = ?,
+            updated_at = ?
+        WHERE id = ?
+    """, (error_message, status, now, file_id))
+    rows = c.rowcount
+    conn.commit()
+    conn.close()
+    return rows > 0
+
+
+def rag_update_chunking(
+    file_id: str,
+    chunks_path: str,
+    chunk_count: int,
+    page_count: int = None,
+    char_count: int = None,
+    status: str = "chunked"
+) -> bool:
+    """
+    Updates RAG file with chunking metadata.
+    Clears any previous error.
+    Returns True if a row was updated, False otherwise.
+    """
+    now = datetime.utcnow().isoformat()
+    conn = _connect_db()
+    c = conn.cursor()
+    c.execute("""
+        UPDATE rag_files
+        SET chunks_path = ?,
+            chunk_count = ?,
+            page_count = COALESCE(?, page_count),
+            char_count = COALESCE(?, char_count),
+            status = ?,
+            error = NULL,
+            updated_at = ?
+        WHERE id = ?
+    """, (chunks_path, chunk_count, page_count, char_count, status, now, file_id))
+    rows = c.rowcount
+    conn.commit()
+    conn.close()
+    return rows > 0
+
+
+def rag_update_indexing(
+    file_id: str,
+    vector_count: int,
+    index_backend: str,
+    index_collection: str,
+    status: str = "indexed"
+) -> bool:
+    """
+    Updates RAG file with vector indexing metadata.
+    Clears any previous error.
+    Returns True if a row was updated, False otherwise.
+    """
+    now = datetime.utcnow().isoformat()
+    conn = _connect_db()
+    c = conn.cursor()
+    c.execute("""
+        UPDATE rag_files
+        SET vector_count = ?,
+            index_backend = ?,
+            index_collection = ?,
+            status = ?,
+            error = NULL,
+            indexed_at = ?
+        WHERE id = ?
+    """, (vector_count, index_backend, index_collection, status, now, file_id))
+    rows = c.rowcount
+    conn.commit()
+    conn.close()
+    return rows > 0
+
+
+def rag_get_session_settings(session_id: str) -> Dict[str, bool]:
+    """Get or create RAG session settings."""
+    conn = _connect_db()
+    c = conn.cursor()
+    c.execute("SELECT rag_enabled, auto_index FROM rag_session_settings WHERE session_id = ?",
+              (session_id,))
+    row = c.fetchone()
+
+    if not row:
+        # Auto-create with defaults
+        now = datetime.utcnow().isoformat()
+        c.execute("INSERT INTO rag_session_settings (session_id, rag_enabled, auto_index, updated_at) VALUES (?, 1, 1, ?)",
+                  (session_id, now))
+        conn.commit()
+        result = {"rag_enabled": True, "auto_index": True}
+    else:
+        result = {"rag_enabled": bool(row[0]), "auto_index": bool(row[1])}
+
+    conn.close()
+    return result
+
+
+def rag_set_session_settings(session_id: str, rag_enabled: Optional[bool] = None, auto_index: Optional[bool] = None) -> Dict[str, bool]:
+    """Update RAG session settings."""
+    conn = _connect_db()
+    c = conn.cursor()
+
+    # Get current values
+    c.execute("SELECT rag_enabled, auto_index FROM rag_session_settings WHERE session_id = ?", (session_id,))
+    row = c.fetchone()
+
+    if not row:
+        # Create row if missing
+        now = datetime.utcnow().isoformat()
+        c.execute("INSERT INTO rag_session_settings (session_id, rag_enabled, auto_index, updated_at) VALUES (?, 1, 1, ?)",
+                  (session_id, now))
+        current = {"rag_enabled": True, "auto_index": True}
+    else:
+        current = {"rag_enabled": bool(row[0]), "auto_index": bool(row[1])}
+
+    # Update changed values
+    new_rag_enabled = rag_enabled if rag_enabled is not None else current["rag_enabled"]
+    new_auto_index = auto_index if auto_index is not None else current["auto_index"]
+
+    now = datetime.utcnow().isoformat()
+    c.execute("UPDATE rag_session_settings SET rag_enabled = ?, auto_index = ?, updated_at = ? WHERE session_id = ?",
+              (int(new_rag_enabled), int(new_auto_index), now, session_id))
+    conn.commit()
+    conn.close()
+
+    return {"rag_enabled": new_rag_enabled, "auto_index": new_auto_index}
+
+
+def rag_set_file_active(session_id: str, file_id: str, is_active: bool) -> bool:
+    """Set file active status (validates session ownership)."""
+    # Verify file belongs to session
+    file_record = rag_get_file(file_id)
+    if not file_record or file_record["session_id"] != session_id:
+        return False
+
+    conn = _connect_db()
+    c = conn.cursor()
+    now = datetime.utcnow().isoformat()
+    c.execute("UPDATE rag_files SET is_active = ?, updated_at = ? WHERE id = ?",
+              (int(is_active), now, file_id))
+    rows = c.rowcount
+    conn.commit()
+    conn.close()
+    return rows > 0

@@ -23,3 +23,28 @@ secret.env
 app/static/wallpaper.bg
 app/static/.temp_user_name
 CLAUDE.md
+
+
+EOF'
+
+  # Local data directory
+  .localis_data/
+
+  # Voice venv
+  .venv-voice/
+
+  # File manager metadata
+  .directory
+
+  # Error logs
+  Error Log/
+
+  # Test audio files
+  *.wav
+
+  # Voice model files / TTS binaries
+  voices/
+
+  # Backup files
+  *.backup
+  EOF

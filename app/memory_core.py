@@ -2,12 +2,26 @@
 Core Memory Module
 
 NOTE: This file is maintained as the single memory module for the app.
+
+ARCHITECTURE: GLOBAL MEMORY MODEL
+
+All memory (Tier-A identity + Tier-B facts) is GLOBAL across sessions.
+- Chat messages are session-isolated
+- But user identity (name, location) and learned facts are shared
+- This ensures consistent user context regardless of which session is active
+
+session_id parameters exist only for telemetry/logging, not filtering.
+
+TIER-A (Identity): Core profile (preferred_name, location, timezone, language_preferences)
+TIER-B (Extended): Auto-learned facts, interests, projects, preferences
 """
 
 from dataclasses import dataclass
 from datetime import datetime
 import re
 import json
+import hashlib
+import time
 from typing import Dict, List, Optional, Set, Literal, Any, Union, Tuple
 
 from . import database
@@ -20,6 +34,20 @@ except ImportError:
     np = None
     NUMPY_AVAILABLE = False
     print("[MEMORY_CORE] Warning: 'numpy' not found. Vector memory disabled.")
+
+# --- RETRIEVAL CACHE ---
+_retrieval_cache: Dict[str, Tuple[str, float]] = {}
+RETRIEVAL_CACHE_TTL = 10.0  # Cache for 10 seconds
+MAX_CACHE_SIZE = 50
+
+def _cache_key(query: str, k: int) -> str:
+    """Generate cache key for memory query."""
+    return hashlib.md5(f"{query}:{k}".encode()).hexdigest()
+
+# --- IDENTITY CACHE ---
+_identity_cache: Optional[Dict[str, str]] = None
+_identity_cache_time: float = 0
+IDENTITY_CACHE_TTL = 30.0  # Cache for 30 seconds
 
 # ------------------------------------------------------------------------------
 # Data Structures
@@ -92,14 +120,27 @@ _EMBEDDER = None
 
 
 def get_embedder():
-    """Lazy loader for SentenceTransformer with failure handling."""
+    """Lazy loader for SentenceTransformer with failure handling and GPU acceleration."""
     global _EMBEDDER
     if _EMBEDDER is None:
         try:
             from sentence_transformers import SentenceTransformer
+            import torch
 
-            print(f"[MEMORY_CORE] Loading embedding model {EMBEDDING_MODEL_NAME} on CPU...")
-            _EMBEDDER = SentenceTransformer(EMBEDDING_MODEL_NAME, device="cpu")
+            # Auto-detect device
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            print(f"[MEMORY_CORE] Loading embedding model {EMBEDDING_MODEL_NAME} on {device.upper()}...")
+
+            _EMBEDDER = SentenceTransformer(EMBEDDING_MODEL_NAME, device=device)
+
+            # Optimize for inference on GPU using FP16 for 2x faster processing
+            if device == "cuda":
+                try:
+                    _EMBEDDER.half()
+                    print(f"[MEMORY_CORE] Enabled FP16 mode for GPU acceleration")
+                except Exception as e:
+                    print(f"[MEMORY_CORE] Warning: Could not enable FP16: {e}")
+
         except ImportError:
             print("[MEMORY_CORE] Warning: 'sentence-transformers' not found. Vector memory disabled.")
             return None
@@ -251,13 +292,21 @@ def _coerce_to_items(value: Optional[str]) -> List[str]:
 # NEW: Tool-Facing Public API
 # ------------------------------------------------------------------------------
 
-def tool_memory_retrieve(session_id: str, query: str, k: int = 8) -> str:
+def _do_memory_retrieve(query: str, session_id: str = None, k: int = 8) -> str:
     """
-    Retrieves a formatted block of memory relevant to the query.
-    Combines deterministic Tier-A identity with hybrid Tier-B retrieval (Vector + KV).
+    Original retrieval logic (extracted for caching).
+    Retrieves formatted memory relevant to the query.
+    Combines Tier-A identity with hybrid Tier-B retrieval (Vector + KV).
+
+    NOTE: Memory is GLOBAL across all sessions. session_id is for logging only.
+
+    Args:
+        query: Search query for memory retrieval
+        session_id: Optional, used only for telemetry/logging
+        k: Number of Tier-B items to retrieve
     """
     # 1. Tier-A: Deterministic Identity
-    identity_context = get_identity_context(session_id)
+    identity_context = get_identity_context()
     identity_block = format_identity_for_prompt(identity_context)
 
     # 2. Tier-B: Hybrid Retrieval
@@ -265,7 +314,7 @@ def tool_memory_retrieve(session_id: str, query: str, k: int = 8) -> str:
 
     # 2a. Vector Retrieval
     if NUMPY_AVAILABLE:
-        vector_results = retrieve_vector_memory(query, session_id, k=k)
+        vector_results = retrieve_vector_memory(query, k=k)
         candidates.extend(vector_results)
 
     # 2b. KV Retrieval (Keyword/Intent Matching)
@@ -333,6 +382,37 @@ def tool_memory_retrieve(session_id: str, query: str, k: int = 8) -> str:
     return "\n\n".join(output_parts)
 
 
+def tool_memory_retrieve(query: str, session_id: str = None, k: int = 8) -> str:
+    """Retrieve memory with caching."""
+    global _retrieval_cache
+
+    cache_key_str = _cache_key(query, k)
+    current_time = time.time()
+
+    # Check cache
+    if cache_key_str in _retrieval_cache:
+        result, timestamp = _retrieval_cache[cache_key_str]
+        if (current_time - timestamp) < RETRIEVAL_CACHE_TTL:
+            print(f"[Memory] Cache HIT for query: {query[:50]}")
+            return result
+
+    # Cache miss - generate result
+    print(f"[Memory] Cache MISS for query: {query[:50]}")
+    result = _do_memory_retrieve(query, session_id, k)
+
+    # Update cache
+    _retrieval_cache[cache_key_str] = (result, current_time)
+
+    # Evict old entries if cache too large
+    if len(_retrieval_cache) > MAX_CACHE_SIZE:
+        sorted_keys = sorted(_retrieval_cache.keys(),
+                           key=lambda k: _retrieval_cache[k][1])
+        for old_key in sorted_keys[:10]:
+            del _retrieval_cache[old_key]
+
+    return result
+
+
 def tool_memory_write(
     session_id: str,
     key: Optional[str],
@@ -376,6 +456,10 @@ def tool_memory_write(
         }
         database.upsert_user_memory_meta(safe_key, meta)
         log_event("tool_write_tier_a", {"key": safe_key}, session_id)
+
+        # Invalidate identity cache after Tier-A write
+        invalidate_identity_cache()
+
         return {"ok": True, "key": safe_key}
 
     elif target == "tier_b":
@@ -502,13 +586,39 @@ def parse_memory_command(user_text: str) -> Optional[Dict[str, str]]:
     return None
 
 
-def get_identity_context(session_id: str) -> Dict[str, str]:
+def get_identity_context() -> Dict[str, str]:
+    """
+    Retrieve user identity (Tier-A) from global memory with caching.
+
+    NOTE: Identity is GLOBAL - same name, location, timezone across all sessions.
+    """
+    global _identity_cache, _identity_cache_time
+
+    current_time = time.time()
+
+    # Return cached value if fresh
+    if _identity_cache is not None and (current_time - _identity_cache_time) < IDENTITY_CACHE_TTL:
+        return _identity_cache.copy()
+
+    # Fetch from database
     raw_rows = database.get_core_user_memories_with_meta()
     identity: Dict[str, str] = {}
     for row in raw_rows:
         if row["key"] and row["value"]:
             identity[row["key"]] = normalize_identity_value(row["key"], row["value"])
-    return identity
+
+    # Update cache
+    _identity_cache = identity
+    _identity_cache_time = current_time
+
+    return identity.copy()
+
+
+def invalidate_identity_cache():
+    """Call this after updating Tier-A memory."""
+    global _identity_cache, _identity_cache_time
+    _identity_cache = None
+    _identity_cache_time = 0
 
 
 def add_vector_memory(
@@ -538,7 +648,12 @@ def add_vector_memory(
     return row_id
 
 
-def retrieve_vector_memory(query: str, session_id: str, k: int = 5) -> List[MemoryItem]:
+def retrieve_vector_memory(query: str, k: int = 5) -> List[MemoryItem]:
+    """
+    Retrieve memory items using vector similarity.
+
+    NOTE: Searches ALL vector memories globally (no session filtering).
+    """
     if not NUMPY_AVAILABLE:
         return []
 
@@ -547,7 +662,9 @@ def retrieve_vector_memory(query: str, session_id: str, k: int = 5) -> List[Memo
         return []
 
     q_arr = np.array(query_vec, dtype=np.float32)
-    candidates = database.list_vector_memory_items(limit=2000)
+    # Reduced from 2000 to 500 for performance
+    # Most recent memories are typically most relevant
+    candidates = database.list_vector_memory_items(limit=500)
     scored_items = []
 
     for row in candidates:
@@ -656,7 +773,7 @@ def build_chat_context_v2(
       4. User Prompt
     """
     # 1) Identity (Tier-A)
-    identity = get_identity_context(session_id)
+    identity = get_identity_context()
     identity_block = format_identity_for_prompt(identity)
     full_system = system_prompt
     if identity_block:

@@ -24,6 +24,23 @@
 <!-- GLOBAL DIM OVERLAY -->
 <div id="dim-overlay"></div>
 
+<!-- Session Indicator (top-right corner) -->
+<div id="session-indicator" style="
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    padding: 5px 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: #888;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    z-index: 1000;
+    user-select: none;
+    pointer-events: none;
+">
+    Session: <span id="session-id-display">default</span>
+</div>
+
 <!-- FIRST RUN TUTORIAL OVERLAY -->
 <div id="frt-overlay">
     <div id="frt-content">
@@ -129,6 +146,38 @@
     </div>
 </div>
 
+<!-- SYSTEM PROMPT MODAL -->
+<div id="system-prompt-modal" class="modal-overlay hidden">
+    <div class="modal-dialog" style="max-width: 680px;">
+        <div class="modal-header">
+            <h2>System Prompt</h2>
+            <button class="modal-close" id="btn-close-prompt-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="prompt-profiles">
+                <button class="prompt-profile-chip" data-prompt="You are a helpful, concise assistant. Answer directly without unnecessary preamble.">Concise Helper</button>
+                <button class="prompt-profile-chip" data-prompt="You are a senior software engineer. Provide detailed technical explanations with code examples. Prefer clean, idiomatic solutions.">Code Expert</button>
+                <button class="prompt-profile-chip" data-prompt="You are a creative writing partner. Help brainstorm ideas, develop characters, refine prose, and give constructive feedback on writing.">Creative Writer</button>
+                <button class="prompt-profile-chip" data-prompt="You are a research analyst. Provide thorough, well-structured analysis with evidence-based reasoning. Cite your assumptions.">Research Analyst</button>
+                <button class="prompt-profile-chip" data-prompt="You are a patient tutor who explains concepts step-by-step. Use analogies and examples. Check understanding before moving on.">Tutor</button>
+                <button class="prompt-profile-chip" data-prompt="You are a professional editor. Fix grammar, improve clarity, tighten prose, and maintain the author's voice. Explain your changes.">Editor</button>
+            </div>
+            <textarea id="system-prompt-modal-editor"
+                      class="modal-textarea"
+                      placeholder="You are a helpful AI assistant..."
+                      rows="10"
+                      spellcheck="false"></textarea>
+            <div class="modal-char-count">
+                <span id="modal-prompt-length">0</span> characters
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="btn-modal-reset-prompt" class="modal-btn-secondary">Reset to Default</button>
+            <button id="btn-modal-save-prompt" class="modal-btn-primary">Save</button>
+        </div>
+    </div>
+</div>
+
 <!-- BOOT SCREEN -->
 <div id="boot-screen">
   <div class="boot-content">
@@ -175,7 +224,8 @@
                 <span class="top-bar-divider">|</span>
                 <div id="session-title" class="session-title">New Session</div>
             </div>
-            <div style="display:flex; align-items:center; gap:8px;">
+            <!-- Web search toggle removed - use tools picker instead -->
+            <div style="display:none;">
                 <button id="btn-search-toggle" class="btn-search-toggle">WEB SEARCH: OFF</button>
             </div>
         </div>
@@ -189,6 +239,9 @@
         </div>
 
         <div class="input-wrapper">
+            <!-- Tools Chip Row (Shows selected tools) -->
+            <div id="tools-chip-row" class="tools-chip-row"></div>
+
             <div class="input-container">
                 <div class="hat-decoration">
                     <svg viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg">
@@ -197,11 +250,52 @@
                         <path d="M32,45 Q50,45 68,45 L68,50 Q50,50 32,50 Z" fill="#ef4444" stroke="#b91c1c" stroke-width="1"/>
                     </svg>
                 </div>
+                <input type="file" id="from-file-input" multiple hidden accept=".pdf,.txt,.md,.docx,.csv,application/pdf,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+                <button type="button" id="tools-picker-btn" class="tools-picker-btn" title="Tools" aria-label="Open tools picker" aria-haspopup="true" aria-expanded="false">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>
                 <div id="tui-prefix">➜ ~</div>
                 <textarea id="prompt" rows="1" placeholder="Type a message..."></textarea>
-                <div class="input-actions"><button id="send-btn">SEND</button></div>
+                <div class="input-actions">
+                    <!-- Voice: mic button (hidden until /voice/status confirms available) -->
+                    <button id="voice-mic-btn" class="voice-mic-btn" title="Hold to speak" aria-label="Push to talk" hidden>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                            <line x1="12" y1="19" x2="12" y2="23"></line>
+                            <line x1="8" y1="23" x2="16" y2="23"></line>
+                        </svg>
+                    </button>
+                    <!-- Wake word toggle (hidden until voice available) -->
+                    <button id="wakeword-toggle-btn" class="wakeword-toggle-btn"
+                            title="Wake word: OFF" aria-label="Toggle wake word" hidden>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                            <circle cx="12" cy="20" r="1" fill="currentColor" stroke="none"/>
+                        </svg>
+                        <span id="wakeword-state-label" class="wakeword-state-label"></span>
+                    </button>
+                    <button id="think-toggle" class="think-toggle-btn" title="Think mode: OFF">💭</button>
+                    <button id="send-btn">SEND</button>
+                </div>
             </div>
-            <div style="text-align:center; font-size:0.75rem; color:var(--text-secondary); margin-top:12px; opacity:0.6;">Shift+Enter for newline</div>
+            <!-- Voice mode toggle pill (hidden until voice available) -->
+            <div id="voice-mode-toggle" class="voice-mode-pill" hidden>
+                <button class="voice-mode-opt active" data-mode="chat" aria-pressed="true">Chat</button>
+                <button class="voice-mode-opt" data-mode="ha" aria-pressed="false">Home</button>
+            </div>
+            <!-- Voice cancel bar (shown during confirming state) -->
+            <div id="voice-cancel-bar" class="voice-cancel-bar" hidden>
+                <div class="voice-cancel-progress"></div>
+                <span class="voice-cancel-label">Sending in <span id="voice-cancel-countdown">1</span>s…</span>
+                <button id="voice-cancel-btn" class="voice-cancel-x" aria-label="Cancel voice send">✕ Cancel</button>
+            </div>
+            <div style="text-align:center; font-size:0.75rem; color:var(--text-secondary); margin-top:12px; opacity:0.3;">Shift+Enter for newline</div>
         </div>
     </div>
 
@@ -211,6 +305,80 @@
         <button id="btn-rail-temp" class="rail-btn" title="Temperature">⚡</button>
         <button id="btn-rail-memory" class="rail-btn" title="Memory">💾</button>
         <button id="btn-rail-appearance" class="rail-btn" title="Appearance">◑</button>
+    </div>
+
+    <!-- Tools Picker Modal -->
+    <div id="tools-picker-modal" class="tools-picker-modal hidden" role="dialog" aria-modal="true" aria-labelledby="tools-picker-header">
+        <div class="tools-picker-content">
+            <div id="tools-picker-header" class="tools-picker-header">Tools</div>
+            <div class="tools-picker-list" role="menu">
+                <!-- From File (Upload and retrieve) -->
+                <button class="tool-option" data-tool="from_file" role="menuitem" aria-label="Upload and index files">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                        <polyline points="13 2 13 9 20 9"></polyline>
+                    </svg>
+                    <span>From File</span>
+                </button>
+
+                <!-- Search Web -->
+                <div class="tool-option-wrapper">
+                    <button class="tool-option" data-tool="web_search" role="menuitemcheckbox" aria-label="Search the web" aria-checked="false">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                        <span>Search Web</span>
+                    </button>
+                    <div class="tool-config hidden" data-config-for="web_search">
+                        <label class="tool-config-label">
+                            Custom query (optional):
+                            <input type="text" id="web-search-query" placeholder="Leave blank to use your message" class="tool-config-input">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Remember -->
+                <div class="tool-option-wrapper">
+                    <button class="tool-option" data-tool="memory_write" role="menuitemcheckbox" aria-label="Remember information" aria-checked="false">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                            <polyline points="7 3 7 8 15 8"></polyline>
+                        </svg>
+                        <span>Remember</span>
+                    </button>
+                    <div class="tool-config hidden" data-config-for="memory_write">
+                        <label class="tool-config-label">
+                            Key:
+                            <input type="text" id="memory-key" placeholder="e.g., interests, projects" value="misc" class="tool-config-input">
+                        </label>
+                        <label class="tool-config-label">
+                            Value:
+                            <textarea id="memory-value" placeholder="What to remember (leave blank to use your message)" rows="2" class="tool-config-textarea"></textarea>
+                        </label>
+                        <label class="tool-config-label">
+                            Tier:
+                            <select id="memory-tier" class="tool-config-select">
+                                <option value="tier_b">Extended Memory (Tier B)</option>
+                                <option value="tier_a">Core Identity (Tier A)</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Home Control (Assist Mode) -->
+                <div class="tool-option-wrapper">
+                    <button class="tool-option" data-tool="assist_mode" role="menuitemcheckbox" aria-label="Control smart home devices" aria-checked="false">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                        </svg>
+                        <span>Home Control</span>
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -226,19 +394,42 @@
             <label>Model Selection</label>
             <select id="model-select"><option>Scanning...</option></select>
             <!-- MODEL METADATA DISPLAY -->
-            <div id="model-metadata-display" style="font-size: 0.75rem; color: var(--text-secondary); margin: 8px 0; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; display:none; border: 1px solid var(--border-subtle);">
+            <div id="model-metadata-display">
                 <!-- Populated via JS -->
             </div>
-            <button id="btn-load" class="btn-full">LOAD MODEL</button>
-            <div id="model-status" style="font-size:0.8rem; text-align:center; opacity:0.7; margin-top:5px;">STATUS: OFFLINE</div>
+            <!-- Button container with Load Model + Folder Icon -->
+            <div class="btn-row">
+                <button type="button" id="btn-load" class="btn-primary">LOAD MODEL</button>
+                <button type="button" id="btn-open-models-dir" class="btn-icon" title="Open models folder">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </button>
+            </div>
+            <button type="button" id="btn-unload" class="btn-full" style="margin-top:8px; background:var(--bg-dark); border:1px solid var(--border-subtle); color:var(--text-secondary);">UNLOAD MODEL</button>
+            <div id="model-status" class="model-status-text">STATUS: OFFLINE</div>
         </div>
 
-        <hr style="border:0; border-top:1px dashed var(--border-subtle);">
+
+        <!-- SYSTEM PROMPT EDITOR -->
+        <div class="setting-group" id="grp-system-prompt">
+            <label>System Prompt</label>
+            <button type="button" id="btn-open-prompt-modal" class="btn-full">Edit System Prompt</button>
+        </div>
+        <!-- Hidden textarea for compatibility -->
+        <div style="display:none;">
+            <textarea id="system-prompt-editor"></textarea>
+            <div id="prompt-status"></div>
+        </div>
+
 
         <!-- MEMORY MATRIX CONTAINER (NEW) -->
         <div id="memory-matrix-container" style="display:none;">
             <div class="setting-group">
                 <label style="color:#60A5FA;">Memory Matrix</label>
+                <div class="memory-scope-info">
+                    <strong>Memory Scope:</strong> Your identity and learned facts are shared globally across all sessions. Only messages are session-specific.
+                </div>
                 <div class="mem-section" id="mem-tier-a">
                     <div class="mem-title">Identity (Tier A)</div>
                     <!-- JS populated -->
@@ -252,8 +443,7 @@
                 </div>
                 <button id="btn-refresh-memory" class="btn-full" style="margin-top:12px;">Refresh Memory</button>
             </div>
-            <hr style="border:0; border-top:1px dashed var(--border-subtle);">
-        </div>
+            </div>
 
         <!-- WEB UPLINK CONTAINER (NEW) -->
         <div id="web-uplink-container" style="display:none;">
@@ -264,8 +454,7 @@
                     <div class="mem-kv"><span class="mem-k">Provider</span> <span class="mem-v" id="disp-web-provider">AUTO</span></div>
                 </div>
             </div>
-            <hr style="border:0; border-top:1px dashed var(--border-subtle);">
-        </div>
+            </div>
 
         <div class="setting-group" id="grp-wallpaper">
             <label>Wallpaper</label>
@@ -281,7 +470,6 @@
             </div>
         </div>
 
-        <hr style="border:0; border-top:1px dashed var(--border-subtle);">
 
         <div class="setting-group" id="grp-gpu">
             <div class="row-spread"><label>GPU Layers</label><input type="number" id="num-layers" value="35" min="0" max="99" style="width:70px;"></div>
@@ -314,7 +502,7 @@
         </div>
 
         <!-- DEV BUTTON (Temporary Reset Tutorial Button) -->
-        <div class="setting-group">
+        <div class="setting-group" style="display:none;">
             <button id="btn-reset-tutorial" class="btn-full" style="background:#EF4444; color:white; font-size:0.8rem; margin-top: 10px;">[DEV] RESET TUTORIAL</button>
         </div>
     </div>

@@ -4,6 +4,90 @@ const renderer = new marked.Renderer();
 renderer.html = (html) => "";
 marked.setOptions({ renderer: renderer });
 
+// Debounce utility for performance optimization
+const debounce = (func, wait) => {
+    let timeout;
+    const debounced = function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+    // Add flush method to force immediate execution
+    debounced.flush = function() {
+        if (timeout) {
+            clearTimeout(timeout);
+            timeout = null;
+        }
+    };
+    return debounced;
+};
+
+// Logger utility with debug toggle and ring buffer
+const Logger = (() => {
+    let enabled = false;
+    const buffer = [];
+    const MAX_BUFFER_SIZE = 500;
+    const warnOnceKeys = new Set();
+
+    const addToBuffer = (entry) => {
+        buffer.push(entry);
+        if (buffer.length > MAX_BUFFER_SIZE) {
+            buffer.shift();
+        }
+    };
+
+    return {
+        setEnabled(value) {
+            enabled = !!value;
+            if (enabled) {
+                console.log('[Logger] Debug logging enabled');
+            }
+        },
+
+        debug(category, msg, meta = null) {
+            if (!enabled) return;
+            const entry = { level: 'debug', category, msg, meta, time: Date.now() };
+            addToBuffer(entry);
+            console.log(`[${category}]`, msg, meta || '');
+        },
+
+        info(category, msg, meta = null) {
+            const entry = { level: 'info', category, msg, meta, time: Date.now() };
+            addToBuffer(entry);
+            console.info(`[${category}]`, msg, meta || '');
+        },
+
+        warn(category, msg, meta = null) {
+            const entry = { level: 'warn', category, msg, meta, time: Date.now() };
+            addToBuffer(entry);
+            console.warn(`[${category}]`, msg, meta || '');
+        },
+
+        error(category, msg, meta = null) {
+            const entry = { level: 'error', category, msg, meta, time: Date.now() };
+            addToBuffer(entry);
+            console.error(`[${category}]`, msg, meta || '');
+        },
+
+        warnOnce(key, category, msg, meta = null) {
+            if (warnOnceKeys.has(key)) return;
+            warnOnceKeys.add(key);
+            this.warn(category, msg, meta);
+        },
+
+        getBuffer() {
+            return buffer;
+        },
+
+        clearBuffer() {
+            buffer.length = 0;
+        }
+    };
+})();
+
 // XSS Prevention Helper
 const escapeHtml = (unsafe) => {
     if (typeof unsafe !== 'string') return unsafe;
@@ -15,7 +99,7 @@ const escapeHtml = (unsafe) => {
     .replace(/'/g, "&#039;");
 };
 
-// Shared SSE Reader
+// Shared SSE Reader (Enhanced for multi-line data payloads)
 async function readSSE(response, onData) {
     if (!response.body) return;
     const reader = response.body.getReader();
@@ -25,20 +109,46 @@ async function readSSE(response, onData) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || ""; // Keep partial line
-        for (const part of parts) {
-            const lines = part.split("\n");
-            for (const line of lines) {
-                if (line.startsWith("data: ")) {
-                    try {
-                        const payload = JSON.parse(line.slice(6));
-                        onData(payload);
-                    } catch(e) {}
-                }
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || ""; // Keep incomplete event
+        for (const event of events) {
+            // Collect all data: lines in this SSE event and concatenate
+            const dataLines = event.split("\n")
+                .filter(line => line.startsWith("data: "))
+                .map(line => line.slice(6));
+            if (dataLines.length === 0) continue;
+            const jsonStr = dataLines.join("");
+            try {
+                const payload = JSON.parse(jsonStr);
+                onData(payload);
+            } catch(e) {
+                // Malformed JSON — skip this event, warn once
+                Logger.warnOnce('sse_parse', 'SSE', 'Failed to parse SSE event', jsonStr.substring(0, 100));
             }
         }
     }
+}
+
+// --- THINKING BLOCK PARSER ---
+function parseThinking(text) {
+    const thinkingRegex = /<thinking>([\s\S]*?)<\/thinking>/g;
+    const blocks = [];
+    let match;
+
+    while ((match = thinkingRegex.exec(text)) !== null) {
+        blocks.push({
+            fullMatch: match[0],
+            content: match[1].trim(),
+            startIndex: match.index,
+            endIndex: match.index + match[0].length
+        });
+    }
+
+    return {
+        hasThinking: blocks.length > 0,
+        blocks: blocks,
+        textWithoutThinking: text.replace(thinkingRegex, '')
+    };
 }
 
 // --- UX HELPERS ---
@@ -1270,14 +1380,17 @@ const renderPart = async (index) => {
         FRT.requiredAction.kind = part.requires.kind;
         FRT.requiredAction.satisfied = false;
         FRT.requiredAction.attempts = 0;
-        FRT.requiredAction.baselineQuestion = null;
+        // Don't reset baselineQuestion - preserve it for chat_repeat gate
+        // It will be overwritten by chat_any when needed
+        // FRT.requiredAction.baselineQuestion = null;
         FRT.requiredAction.soft_after = part.requires.soft_after || 999;
         document.getElementById('frt-nav').classList.add('frt-nav-locked');
     } else {
         FRT.requiredAction.kind = null;
         FRT.requiredAction.satisfied = true;
         FRT.requiredAction.attempts = 0;
-        FRT.requiredAction.baselineQuestion = null;
+        // Don't reset baselineQuestion - preserve for chat_repeat gate across non-gate parts
+        // FRT.requiredAction.baselineQuestion = null;
         document.getElementById('frt-nav').classList.remove('frt-nav-locked');
     }
 
@@ -1366,6 +1479,30 @@ const enterFirstRunStep1 = async () => {
     await renderPart(1);
 };
 
+// --- TOAST NOTIFICATION ---
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+        color: white;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        z-index: 10000;
+        animation: slideIn 0.3s ease-out;
+    `;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease-in';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
 // --- DOM ELEMENTS ---
 const els = {
     chatHistory: document.getElementById('chat-history'),
@@ -1377,7 +1514,13 @@ const els = {
     modelSelect: document.getElementById('model-select'),
     modelMetaDisplay: document.getElementById('model-metadata-display'),
     btnLoad: document.getElementById('btn-load'),
+    btnUnload: document.getElementById('btn-unload'),
+    btnOpenModelsDir: document.getElementById('btn-open-models-dir'),
     modelStatus: document.getElementById('model-status'),
+    systemPromptEditor: document.getElementById('system-prompt-editor'),
+    btnSavePrompt: document.getElementById('btn-save-prompt'),
+    btnResetPrompt: document.getElementById('btn-reset-prompt'),
+    promptStatus: document.getElementById('prompt-status'),
     modelDisplay: document.getElementById('model-display'),
     themeSelect: document.getElementById('theme-select'),
     tuiPrefix: document.getElementById('tui-prefix'),
@@ -1398,6 +1541,15 @@ const els = {
     memTierB: document.getElementById('mem-tier-b-tags'),
     dispWebMode: document.getElementById('disp-web-mode'),
     dispWebProvider: document.getElementById('disp-web-provider'),
+    toolsPickerBtn: document.getElementById('tools-picker-btn'),
+    toolsPickerModal: document.getElementById('tools-picker-modal'),
+    toolsChipRow: document.getElementById('tools-chip-row'),
+    voiceMicBtn: document.getElementById('voice-mic-btn'),
+    voiceModeToggle: document.getElementById('voice-mode-toggle'),
+    voiceCancelBar: document.getElementById('voice-cancel-bar'),
+    voiceCancelBtn: document.getElementById('voice-cancel-btn'),
+    voiceCancelCountdown: document.getElementById('voice-cancel-countdown'),
+    wakewordToggleBtn: document.getElementById('wakeword-toggle-btn'),
     inputs: {
         layers: document.getElementById('num-layers'),
         ctx: document.getElementById('num-ctx'),
@@ -1426,11 +1578,52 @@ const state = {
     availableModels: [],
     tutorialHistory: [],
     tutorialSystemPromptId: "default",
-    tutorialSystemPromptText: TUTORIAL_PROMPT_DEFAULT
+    tutorialSystemPromptText: TUTORIAL_PROMPT_DEFAULT,
+    sessionPreferences: {}  // Per-session UI preferences
 };
 
 // Initialize user preferred name from sessionStorage
 window.userPreferredName = sessionStorage.getItem('user_preferred_name') || '';
+
+// --- SESSION PREFERENCE MANAGEMENT ---
+function getSessionThinkMode(sessionId) {
+    if (!state.sessionPreferences[sessionId]) {
+        state.sessionPreferences[sessionId] = { thinkMode: false };
+    }
+    return state.sessionPreferences[sessionId].thinkMode;
+}
+
+function setSessionThinkMode(sessionId, enabled) {
+    if (!state.sessionPreferences[sessionId]) {
+        state.sessionPreferences[sessionId] = {};
+    }
+    state.sessionPreferences[sessionId].thinkMode = enabled;
+
+    // Persist to localStorage
+    try {
+        localStorage.setItem('localis_session_prefs', JSON.stringify(state.sessionPreferences));
+    } catch (e) {
+        console.warn('Failed to save session preferences:', e);
+    }
+
+    // Update UI
+    const thinkToggle = document.getElementById('think-toggle');
+    if (thinkToggle) {
+        thinkToggle.classList.toggle('active', enabled);
+        thinkToggle.title = enabled ? 'Think mode: ON' : 'Think mode: OFF';
+    }
+}
+
+function loadSessionPreferences() {
+    try {
+        const saved = localStorage.getItem('localis_session_prefs');
+        if (saved) {
+            state.sessionPreferences = JSON.parse(saved);
+        }
+    } catch (e) {
+        console.warn('Failed to load session preferences:', e);
+    }
+}
 
 // --- SETTINGS PROXY ---
 const AppSettings = {
@@ -1511,6 +1704,1247 @@ if(elWall.slider) elWall.slider.value = savedOpacity;
 updateWallpaperOpacity(savedOpacity);
 const savedUrl = localStorage.getItem('local_ai_wall_url');
 if(savedUrl) setWallpaperUrl(savedUrl);
+
+// --- RAG UPLOADS UI MODULE ---
+// --- TOOLS PICKER UI MODULE ---
+const toolsUI = {
+    selectedTools: new Set(),
+    stickyTools: new Set(['rag_retrieve', 'web_search', 'assist_mode']), // Tools that stay selected
+    toolConfigs: {}, // Store config values for each tool
+    _didInit: false,
+
+    init() {
+        if (!els.toolsPickerBtn || !els.toolsPickerModal) return;
+        if (this._didInit) return;
+        this._didInit = true;
+
+        // Toggle modal on button click
+        els.toolsPickerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleModal();
+        });
+
+        // Close modal when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!els.toolsPickerModal.classList.contains('hidden') &&
+                !els.toolsPickerModal.contains(e.target) &&
+                !els.toolsPickerBtn.contains(e.target)) {
+                this.toggleModal(false);
+            }
+        });
+
+        // Tool option click handlers
+        const toolOptions = els.toolsPickerModal.querySelectorAll('.tool-option');
+        toolOptions.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const tool = btn.dataset.tool;
+
+                if (tool === 'from_file') {
+                    // From File triggers file picker immediately
+                    const fileInput = document.getElementById('from-file-input');
+                    if (fileInput) {
+                        fileInput.click();
+                    }
+                    this.toggleModal(false);
+                } else {
+                    // Toggle tool selection
+                    this.toggleTool(tool);
+                }
+            });
+        });
+
+        // File input handler for "From File" tool
+        const fromFileInput = document.getElementById('from-file-input');
+        if (fromFileInput) {
+            fromFileInput.addEventListener('change', async (e) => {
+                const files = Array.from(e.target.files);
+                if (files.length === 0) return;
+
+                await this.handleFromFileUpload(files);
+
+                // Clear input so same file can be re-uploaded
+                e.target.value = '';
+            });
+        }
+
+        // Config input handlers
+        const ragTopKSlider = document.getElementById('rag-top-k-slider');
+        const ragTopKValue = document.getElementById('rag-top-k-value');
+        if (ragTopKSlider && ragTopKValue) {
+            ragTopKSlider.addEventListener('input', (e) => {
+                ragTopKValue.textContent = e.target.value;
+            });
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (els.toolsPickerModal.classList.contains('hidden')) return;
+
+            // ESC closes modal
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                this.toggleModal(false);
+                els.toolsPickerBtn.focus();
+                return;
+            }
+
+            // Arrow keys navigate
+            const toolOptions = Array.from(els.toolsPickerModal.querySelectorAll('.tool-option'));
+            const focusedIndex = toolOptions.findIndex(opt => opt === document.activeElement);
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                const nextIndex = (focusedIndex + 1) % toolOptions.length;
+                toolOptions[nextIndex].focus();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const prevIndex = focusedIndex <= 0 ? toolOptions.length - 1 : focusedIndex - 1;
+                toolOptions[prevIndex].focus();
+            } else if (e.key === 'Enter' || e.key === ' ') {
+                // Enter/Space toggles selection
+                if (focusedIndex >= 0) {
+                    e.preventDefault();
+                    toolOptions[focusedIndex].click();
+                }
+            }
+        });
+
+        this.render();
+    },
+
+    toggleModal(show = null) {
+        const shouldShow = show !== null ? show : els.toolsPickerModal.classList.contains('hidden');
+        if (shouldShow) {
+            els.toolsPickerModal.classList.remove('hidden');
+            els.toolsPickerBtn.setAttribute('aria-expanded', 'true');
+            // Focus first tool option when modal opens
+            const firstOption = els.toolsPickerModal.querySelector('.tool-option');
+            if (firstOption) {
+                setTimeout(() => firstOption.focus(), 50);
+            }
+        } else {
+            els.toolsPickerModal.classList.add('hidden');
+            els.toolsPickerBtn.setAttribute('aria-expanded', 'false');
+            // Return focus to trigger button when modal closes
+            if (document.activeElement !== els.toolsPickerBtn) {
+                els.toolsPickerBtn.focus();
+            }
+        }
+        this.updateButtonStates();
+    },
+
+    toggleTool(toolName) {
+        if (this.selectedTools.has(toolName)) {
+            this.selectedTools.delete(toolName);
+            this.hideConfig(toolName);
+        } else {
+            this.selectedTools.add(toolName);
+            this.showConfig(toolName);
+
+            // Show warning if selecting RAG but no indexed files
+            if (toolName === 'rag_retrieve') {
+                this.checkRagAvailability();
+            }
+        }
+        this.updateButtonStates();
+        this.render();
+    },
+
+    showConfig(toolName) {
+        const configPanel = document.querySelector(`[data-config-for="${toolName}"]`);
+        if (configPanel) {
+            configPanel.classList.remove('hidden');
+        }
+    },
+
+    hideConfig(toolName) {
+        const configPanel = document.querySelector(`[data-config-for="${toolName}"]`);
+        if (configPanel) {
+            configPanel.classList.add('hidden');
+        }
+    },
+
+    async checkRagAvailability() {
+        try {
+            const response = await fetch(`/rag/list?session_id=${state.sessionId}`);
+            const data = await response.json();
+
+            if (data.ok) {
+                const indexedFiles = data.files.filter(f =>
+                    (f.status === 'chunked' || f.status === 'indexed') && f.is_active
+                );
+
+                if (indexedFiles.length === 0) {
+                    showToast('No indexed files found. Upload and embed files first.', 'error');
+                }
+            }
+        } catch (e) {
+            console.warn('[Tools] Failed to check RAG availability:', e);
+        }
+    },
+
+    updateButtonStates() {
+        const toolOptions = els.toolsPickerModal.querySelectorAll('.tool-option');
+        toolOptions.forEach(btn => {
+            const tool = btn.dataset.tool;
+            if (tool !== 'upload') {
+                const isSelected = this.selectedTools.has(tool);
+                if (isSelected) {
+                    btn.classList.add('selected');
+                    btn.setAttribute('aria-checked', 'true');
+                } else {
+                    btn.classList.remove('selected');
+                    btn.setAttribute('aria-checked', 'false');
+                }
+            }
+        });
+    },
+
+    getSelectedTools() {
+        // Return structured tool objects with type and config
+        return Array.from(this.selectedTools).map(toolName => {
+            return {
+                type: toolName,
+                config: this.getToolConfig(toolName)
+            };
+        });
+    },
+
+    getToolConfig(toolName) {
+        // Get configuration from UI inputs
+        const config = {};
+
+        if (toolName === 'rag_retrieve') {
+            const topKSlider = document.getElementById('rag-top-k-slider');
+            config.top_k = topKSlider ? parseInt(topKSlider.value) : 4;
+        }
+
+        if (toolName === 'web_search') {
+            const queryInput = document.getElementById('web-search-query');
+            const query = queryInput ? queryInput.value.trim() : '';
+            if (query) {
+                config.query = query;
+            }
+        }
+
+        if (toolName === 'memory_write') {
+            const keyInput = document.getElementById('memory-key');
+            const valueInput = document.getElementById('memory-value');
+            const tierSelect = document.getElementById('memory-tier');
+
+            config.key = keyInput ? keyInput.value.trim() || 'misc' : 'misc';
+            config.value = valueInput ? valueInput.value.trim() : '';
+            config.tier = tierSelect ? tierSelect.value : 'tier_b';
+        }
+
+        return config;
+    },
+
+    clearOneShot() {
+        // Remove non-sticky tools after message send
+        const toRemove = [];
+        this.selectedTools.forEach(tool => {
+            if (!this.stickyTools.has(tool)) {
+                toRemove.push(tool);
+            }
+        });
+        toRemove.forEach(tool => this.selectedTools.delete(tool));
+        this.updateButtonStates();
+        this.render();
+    },
+
+    async handleFromFileUpload(fileList) {
+        const sessionId = state.sessionId;
+        const uploadedFileIds = [];
+        const fileNames = Array.from(fileList).map(f => f.name);
+
+        // Create in-chat status message
+        const statusMsg = this.createIngestStatusMessage({
+            state: 'running',
+            phase: 'upload',
+            total_files: fileList.length,
+            done_files: 0,
+            current_file_name: fileNames[0],
+            message: `From File: Uploading ${fileList.length} file${fileList.length > 1 ? 's' : ''}...`,
+            error: null
+        });
+
+        // Upload files one by one
+        for (let i = 0; i < fileList.length; i++) {
+            const file = fileList[i];
+            try {
+                this.updateIngestStatus(statusMsg, {
+                    phase: 'upload',
+                    done_files: i,
+                    current_file_name: file.name,
+                    message: `From File: Uploading ${i + 1}/${fileList.length} - ${file.name}`
+                });
+
+                const formData = new FormData();
+                formData.append('session_id', sessionId);
+                formData.append('file', file);
+
+                const response = await fetch('/rag/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    let errorMsg = 'Upload failed';
+                    if (error.detail === 'unsupported_file_type') {
+                        errorMsg = `Unsupported file type: ${file.name}`;
+                    } else if (error.detail === 'file_too_large') {
+                        errorMsg = `File too large: ${file.name} (max 100MB)`;
+                    }
+                    this.updateIngestStatus(statusMsg, {
+                        state: 'error',
+                        message: `From File: Error`,
+                        error: errorMsg
+                    });
+                    return;
+                }
+
+                const result = await response.json();
+                uploadedFileIds.push(result.file.id);
+
+            } catch (err) {
+                console.error('Upload error:', err);
+                this.updateIngestStatus(statusMsg, {
+                    state: 'error',
+                    message: `From File: Error`,
+                    error: `Upload failed: ${err.message}`
+                });
+                return;
+            }
+        }
+
+        // Start actual ingest processing (extract + chunk + index)
+        try {
+            const ingestResp = await fetch('/rag/ingest_start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    file_ids: uploadedFileIds,
+                    force: false
+                })
+            });
+
+            if (!ingestResp.ok) {
+                throw new Error(`Ingest start failed: ${ingestResp.status}`);
+            }
+
+            const ingestData = await ingestResp.json();
+            if (!ingestData.ok) {
+                throw new Error('Ingest start returned ok:false');
+            }
+
+            // Subscribe to SSE progress events
+            this.subscribeToIngestEvents(sessionId, statusMsg, uploadedFileIds);
+
+        } catch (err) {
+            console.error('[RAG] Failed to start ingest:', err);
+            this.updateIngestStatus(statusMsg, {
+                state: 'error',
+                phase: 'upload',
+                message: 'From File: Processing failed',
+                error: `Failed to start processing: ${err.message}`
+            });
+        }
+    },
+
+    subscribeToIngestEvents(sessionId, statusMsgDiv, fileIds) {
+        const eventSource = new EventSource(`/rag/ingest_events?session_id=${sessionId}`);
+
+        eventSource.onmessage = (e) => {
+            try {
+                const data = JSON.parse(e.data);
+
+                // Use event_type as primary discriminator (per CLAUDE.md)
+                if (data.event_type !== 'ingest_status') {
+                    return;
+                }
+
+                // Build message with "From File:" prefix
+                let message = data.message;
+                if (!message.startsWith('From File:')) {
+                    message = `From File: ${message}`;
+                }
+
+                // Update status message with real-time progress
+                this.updateIngestStatus(statusMsgDiv, {
+                    state: data.state,
+                    phase: data.phase,
+                    total_files: data.total_files,
+                    done_files: data.done_files,
+                    current_file_name: data.current_file_name,
+                    message: message,
+                    error: data.error
+                });
+
+                // Close EventSource on terminal states
+                if (data.state === 'done' || data.state === 'error' || data.state === 'cancelled') {
+                    eventSource.close();
+
+                    // Log final state
+                    if (data.state === 'done') {
+                        Logger.log('RAG', `Ingest complete: ${fileIds.length} files`);
+                    } else if (data.state === 'error') {
+                        Logger.error('RAG', `Ingest error: ${data.error || 'Unknown error'}`);
+                    } else {
+                        Logger.warn('RAG', 'Ingest cancelled');
+                    }
+                }
+            } catch (err) {
+                console.error('[RAG] Failed to parse SSE event:', err, e.data);
+            }
+        };
+
+        eventSource.onerror = (err) => {
+            console.error('[RAG] SSE connection error:', err);
+            eventSource.close();
+
+            // Update status to show connection error
+            this.updateIngestStatus(statusMsgDiv, {
+                state: 'error',
+                phase: 'upload',
+                message: 'From File: Connection lost',
+                error: 'SSE connection failed'
+            });
+        };
+    },
+
+    createIngestStatusMessage(status) {
+        const chatHistory = document.getElementById('chat-history');
+        if (!chatHistory) return null;
+
+        const msgDiv = document.createElement('div');
+        msgDiv.classList.add('message', 'ai-msg');
+        msgDiv.dataset.statusMessage = 'true';
+
+        const contentDiv = document.createElement('div');
+        contentDiv.classList.add('msg-content', 'ingest-status-message');
+
+        const summaryDiv = document.createElement('div');
+        summaryDiv.classList.add('ingest-status-summary');
+        summaryDiv.onclick = () => this.toggleIngestDetails(msgDiv);
+
+        const iconSpan = document.createElement('span');
+        iconSpan.classList.add('ingest-status-icon', status.state);
+        iconSpan.innerHTML = this.getIngestIcon(status.state);
+        summaryDiv.appendChild(iconSpan);
+
+        const textSpan = document.createElement('span');
+        textSpan.classList.add('ingest-status-text');
+        textSpan.textContent = status.message;
+        summaryDiv.appendChild(textSpan);
+
+        const expandSpan = document.createElement('span');
+        expandSpan.classList.add('ingest-status-expand');
+        expandSpan.textContent = '▼';
+        summaryDiv.appendChild(expandSpan);
+
+        contentDiv.appendChild(summaryDiv);
+
+        const detailsDiv = document.createElement('div');
+        detailsDiv.classList.add('ingest-status-details');
+        detailsDiv.innerHTML = this.renderIngestDetails(status);
+        contentDiv.appendChild(detailsDiv);
+
+        msgDiv.appendChild(contentDiv);
+        chatHistory.appendChild(msgDiv);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+
+        return msgDiv;
+    },
+
+    updateIngestStatus(msgDiv, updates) {
+        if (!msgDiv) return;
+
+        const currentState = msgDiv.dataset.state || 'running';
+        const newState = updates.state || currentState;
+        msgDiv.dataset.state = newState;
+
+        const iconSpan = msgDiv.querySelector('.ingest-status-icon');
+        if (iconSpan && updates.state) {
+            iconSpan.className = `ingest-status-icon ${newState}`;
+            iconSpan.innerHTML = this.getIngestIcon(newState);
+        }
+
+        const textSpan = msgDiv.querySelector('.ingest-status-text');
+        if (textSpan && updates.message) {
+            textSpan.textContent = updates.message;
+        }
+
+        const detailsDiv = msgDiv.querySelector('.ingest-status-details');
+        if (detailsDiv) {
+            const status = Object.assign({
+                state: newState,
+                phase: updates.phase || 'upload',
+                total_files: updates.total_files || 0,
+                done_files: updates.done_files || 0,
+                current_file_name: updates.current_file_name,
+                error: updates.error
+            }, updates);
+            detailsDiv.innerHTML = this.renderIngestDetails(status);
+        }
+    },
+
+    toggleIngestDetails(msgDiv) {
+        const detailsDiv = msgDiv.querySelector('.ingest-status-details');
+        const expandSpan = msgDiv.querySelector('.ingest-status-expand');
+        if (detailsDiv && expandSpan) {
+            detailsDiv.classList.toggle('visible');
+            expandSpan.classList.toggle('expanded');
+        }
+    },
+
+    getIngestIcon(state) {
+        if (state === 'running') {
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
+        } else if (state === 'done') {
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+        } else if (state === 'error') {
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
+        }
+        return '';
+    },
+
+    renderIngestDetails(status) {
+        const phases = [
+            { key: 'upload', label: 'Upload' },
+            { key: 'extract', label: 'Extract' },
+            { key: 'chunk', label: 'Chunk' },
+            { key: 'index', label: 'Index' }
+        ];
+
+        const phaseItems = phases.map(p => {
+            let className = 'ingest-phase-item';
+            if (status.state === 'done') {
+                className += ' done';
+            } else if (p.key === status.phase) {
+                className += ' active';
+            } else if (phases.findIndex(x => x.key === p.key) < phases.findIndex(x => x.key === status.phase)) {
+                className += ' done';
+            }
+
+            const icon = (className.includes('done') || className.includes('active')) ? '✓' : '○';
+
+            return `
+                <div class="${className}">
+                    <span class="ingest-phase-icon">${icon}</span>
+                    <span>${p.label}</span>
+                </div>
+            `;
+        }).join('');
+
+        let html = `<div class="ingest-phase-list">${phaseItems}</div>`;
+
+        if (status.total_files) {
+            html += `<div class="ingest-file-count">Files: ${status.done_files}/${status.total_files}</div>`;
+        }
+
+        if (status.current_file_name) {
+            html += `<div class="ingest-file-count">Current: ${status.current_file_name}</div>`;
+        }
+
+        if (status.error) {
+            html += `<div class="ingest-error-text">${status.error}</div>`;
+        }
+
+        return html;
+    },
+
+    render() {
+        if (!els.toolsChipRow) return;
+
+        const toolLabels = {
+            'rag_retrieve': 'From Files',
+            'web_search': 'Search Web',
+            'memory_write': 'Remember',
+            'memory_retrieve': 'Recall',
+            'assist_mode': 'Home Control'
+        };
+
+        const toolIcons = {
+            'rag_retrieve': '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>',
+            'web_search': '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>',
+            'memory_write': '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path></svg>',
+            'memory_retrieve': '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>',
+            'assist_mode': '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>'
+        };
+
+        const html = this.getSelectedTools().map(toolObj => {
+            const toolName = toolObj.type;
+            const config = toolObj.config;
+            let label = toolLabels[toolName] || toolName;
+
+            // Add config hint to label
+            if (toolName === 'rag_retrieve' && config.top_k) {
+                label += ` (${config.top_k} chunks)`;
+            } else if (toolName === 'web_search' && config.query) {
+                label += ` ("${config.query.substring(0, 20)}${config.query.length > 20 ? '...' : ''}")`;
+            } else if (toolName === 'memory_write' && config.key) {
+                label += ` (${config.key})`;
+            }
+
+            return `
+                <div class="tools-chip">
+                    <span class="tools-chip-icon">${toolIcons[toolName] || ''}</span>
+                    <span class="tools-chip-label">${label}</span>
+                    <button class="tools-chip-delete" data-tool="${toolName}" title="Remove">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+        els.toolsChipRow.innerHTML = html;
+
+        // Add delete handlers
+        els.toolsChipRow.querySelectorAll('.tools-chip-delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const tool = btn.dataset.tool;
+                this.toggleTool(tool);
+            });
+        });
+    }
+};
+
+const ragUI = {
+    currentFiles: [],
+    ready: false,
+    processingIds: new Set(),
+    pollTimeout: null,
+
+        settings: { rag_enabled: 1, auto_index: 1 },
+    indexStatus: { state: 'idle' },
+    indexPollInterval: null,
+    eventSource: null,
+    usePolling: false,
+    _didInit: false,
+init() {
+        if (!els.ragPlusBtn || !els.ragFileInput || !els.ragPanel) return;
+        if (this._didInit) return;
+
+        // Runtime duplicate-ID check
+        const plusMatches = document.querySelectorAll('#rag-plus-btn');
+        const inputMatches = document.querySelectorAll('#rag-file-input');
+        if (plusMatches.length !== 1 || inputMatches.length !== 1) {
+            console.warn('[RAG] Duplicate ID detected! rag-plus-btn:', plusMatches.length, 'rag-file-input:', inputMatches.length);
+        }
+
+        // + button opens panel (file picker can be triggered via "Select Files" button inside)
+        els.ragPlusBtn.addEventListener('click', () => {
+            Logger.debug('RAG', '+ button clicked');
+            this.togglePanel(true);
+        });
+
+        // Close panel
+        if (els.ragPanelClose) {
+            els.ragPanelClose.addEventListener('click', () => this.togglePanel(false));
+        }
+
+        // Upload button triggers file input
+        if (els.ragUploadBtn) {
+            els.ragUploadBtn.addEventListener('click', () => {
+                els.ragFileInput.click();
+            });
+        }
+
+        // File input change handler
+        els.ragFileInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            await this.uploadFiles(files);
+
+            // Clear input so same file can be re-uploaded
+            e.target.value = '';
+        });
+
+        // Event delegation for delete buttons on chips
+        if (els.ragChipRow) {
+            els.ragChipRow.addEventListener('click', (e) => {
+                const deleteBtn = e.target.closest('.rag-chip-delete');
+                if (deleteBtn) {
+                    e.stopPropagation();
+                    const fileId = deleteBtn.dataset.fileId;
+                    if (fileId) this.deleteFile(fileId);
+                }
+            });
+        }
+
+        // Event delegation for delete and active toggle in file list
+        if (els.ragFileList) {
+            els.ragFileList.addEventListener('click', (e) => {
+                const deleteBtn = e.target.closest('.rag-file-delete');
+                if (deleteBtn) {
+                    e.stopPropagation();
+                    const fileId = deleteBtn.dataset.fileId;
+                    if (fileId) this.deleteFile(fileId);
+                }
+            });
+            els.ragFileList.addEventListener('change', (e) => {
+                if (e.target.classList.contains('rag-file-active-check')) {
+                    const fileId = e.target.dataset.fileId;
+                    if (fileId) this.setFileActive(fileId, e.target.checked);
+                }
+            });
+        }
+
+        // Settings toggle listeners
+        const ragEnabledToggle = document.getElementById('rag-enabled-toggle');
+        const ragAutoIndexToggle = document.getElementById('rag-auto-index-toggle');
+        if (ragEnabledToggle) {
+            ragEnabledToggle.addEventListener('change', (e) => {
+                this.setRagEnabled(e.target.checked);
+            });
+        }
+        if (ragAutoIndexToggle) {
+            ragAutoIndexToggle.addEventListener('change', (e) => {
+                this.setAutoIndex(e.target.checked);
+            });
+        }
+
+        // Embed now button
+        const ragEmbedBtn = document.getElementById('rag-embed-btn');
+        if (ragEmbedBtn) {
+            ragEmbedBtn.addEventListener('click', () => this.startIndexing());
+        }
+
+        // Cancel button
+        const ragCancelBtn = document.getElementById('rag-cancel-btn');
+        if (ragCancelBtn) {
+            ragCancelBtn.addEventListener('click', () => this.cancelIndexing());
+        }
+
+        // Mark as ready
+        this.ready = true;
+        this._didInit = true;
+
+        // Initial refresh
+        this.refresh();
+    },
+
+    togglePanel(show) {
+        Logger.debug('RAG', 'togglePanel called', { show });
+        Logger.debug('RAG', 'ragPanel element exists', !!els.ragPanel);
+
+        const isVisible = els.ragPanel.classList.contains('visible');
+        const shouldShow = show !== undefined ? show : !isVisible;
+
+        Logger.debug('RAG', 'Panel visibility', { isVisible, shouldShow });
+
+        if (shouldShow) {
+            els.ragPanel.classList.add('visible');
+            console.log('[RAG] Added visible class, classList:', els.ragPanel.classList.toString());
+        } else {
+            els.ragPanel.classList.remove('visible');
+            console.log('[RAG] Removed visible class');
+        }
+    },
+
+    async uploadFiles(fileList) {
+        const sessionId = state.sessionId;
+        const uploadedFileIds = [];
+
+        for (const file of fileList) {
+            try {
+                const formData = new FormData();
+                formData.append('session_id', sessionId);
+                formData.append('file', file);
+
+                const response = await fetch('/rag/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    if (error.detail === 'unsupported_file_type') {
+                        alert(`Unsupported file type: ${file.name}\nAllowed: PDF, TXT, MD, DOCX, CSV`);
+                    } else if (error.detail === 'file_too_large') {
+                        alert(`File too large: ${file.name}\nMaximum size: 100MB`);
+                    } else {
+                        alert(`Upload failed: ${file.name}\n${error.detail || 'Unknown error'}`);
+                    }
+                    continue;
+                }
+
+                const result = await response.json();
+                console.log('Uploaded:', result.file.original_name);
+                uploadedFileIds.push(result.file.id);
+
+            } catch (err) {
+                console.error('Upload error:', err);
+                alert(`Upload failed: ${file.name}\n${err.message}`);
+            }
+        }
+
+        // Refresh list after all uploads
+        await this.refresh();
+
+        // Auto-process uploaded files sequentially
+        if (uploadedFileIds.length > 0) {
+            await this.processFiles(uploadedFileIds);
+        }
+
+        // Keep panel visible after upload
+        this.togglePanel(true);
+    },
+
+    async processFiles(fileIds) {
+        const sessionId = state.sessionId;
+
+        // Show panel when processing starts
+        this.togglePanel(true);
+
+        for (const fileId of fileIds) {
+            await this.processFile(fileId, sessionId);
+        }
+
+        // Final refresh after all processing
+        await this.refresh();
+
+        // Auto-start indexing if enabled
+        if (this.settings.auto_index && this.indexStatus.state !== 'running') {
+            await this.startIndexing();
+        }
+    },
+
+    async processFile(fileId, sessionId) {
+        try {
+            this.processingIds.add(fileId);
+            await this.refresh();
+
+            const response = await fetch(
+                `/rag/process/${fileId}?session_id=${encodeURIComponent(sessionId)}`,
+                { method: 'POST' }
+            );
+
+            if (!response.ok) {
+                const error = await response.json();
+                console.error('Process failed:', error);
+            } else {
+                const result = await response.json();
+                console.log('Processed:', result);
+            }
+
+            this.processingIds.delete(fileId);
+
+            // Refresh to show updated status
+            await this.refresh();
+
+        } catch (err) {
+            console.error('Process error:', err);
+            this.processingIds.delete(fileId);
+            await this.refresh();
+        }
+    },
+
+    async refresh() {
+        // Guard: only refresh if initialized
+        if (!this.ready) return;
+
+        try {
+            const sessionId = state.sessionId;
+            const response = await fetch(`/rag/list?session_id=${encodeURIComponent(sessionId)}`);
+
+            if (!response.ok) {
+                console.error('Failed to fetch RAG files');
+                return;
+            }
+
+            const data = await response.json();
+            this.currentFiles = data.files || [];
+            
+            // Store settings
+            if (data.settings) {
+                this.settings = data.settings;
+                // Sync toggle UI with settings
+                const ragEnabledToggle = document.getElementById('rag-enabled-toggle');
+                const ragAutoIndexToggle = document.getElementById('rag-auto-index-toggle');
+                if (ragEnabledToggle) ragEnabledToggle.checked = Boolean(this.settings.rag_enabled);
+                if (ragAutoIndexToggle) ragAutoIndexToggle.checked = Boolean(this.settings.auto_index);
+            }
+            
+            this.render(this.currentFiles);
+
+        } catch (err) {
+            console.error('RAG refresh error:', err);
+        }
+    },
+
+    async deleteFile(fileId) {
+        // Confirmation
+        if (!confirm('Delete this file?')) {
+            return;
+        }
+
+        try {
+            const sessionId = state.sessionId;
+            const response = await fetch(`/rag/file/${fileId}?session_id=${encodeURIComponent(sessionId)}`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                if (error.detail === 'session_mismatch') {
+                    alert('Error: File does not belong to this session');
+                } else if (error.detail === 'file_not_found') {
+                    alert('Error: File not found');
+                } else {
+                    alert(`Delete failed: ${error.detail || 'Unknown error'}`);
+                }
+                return;
+            }
+
+            console.log('Deleted file:', fileId);
+
+            // Refresh list after deletion
+            await this.refresh();
+
+        } catch (err) {
+            console.error('Delete error:', err);
+            alert(`Delete failed: ${err.message}`);
+        }
+    },
+
+    render(files) {
+        // Render file list in panel
+        if (els.ragFileList) {
+            if (files.length === 0) {
+                els.ragFileList.innerHTML = '<div style="text-align:center; color:var(--text-secondary); font-size:0.75rem; padding:20px; opacity:0.6;">No files uploaded</div>';
+            } else {
+                els.ragFileList.innerHTML = files.map(file => {
+                    const isProcessing = this.processingIds.has(file.id);
+                    const statusClass = `rag-status rag-status-${file.status || 'uploaded'}`;
+                    let statusLabel = (file.status || 'uploaded').charAt(0).toUpperCase() + (file.status || 'uploaded').slice(1);
+                    if (isProcessing) statusLabel = 'Processing…';
+
+                    // Build stats string
+                    let stats = '';
+                    if (file.page_count !== null && file.page_count !== undefined) {
+                        stats += `${file.page_count}p `;
+                    }
+                    if (file.char_count !== null && file.char_count !== undefined) {
+                        stats += `${file.char_count}c `;
+                    }
+                    if (file.chunk_count !== null && file.chunk_count !== undefined) {
+                        stats += `${file.chunk_count}ch`;
+                    }
+
+                    // Error message
+                    const errorMsg = file.error ? ` — ${file.error.substring(0, 50)}${file.error.length > 50 ? '...' : ''}` : '';
+
+                    return `
+                        <div class="rag-file-item ${!file.is_active ? 'inactive' : ''}">
+                            <div style="flex: 1; min-width: 0;">
+                                <div class="rag-file-name" title="${escapeHtml(file.original_name)}">
+                                    ${escapeHtml(file.original_name)}
+                                </div>
+                                <div style="display: flex; gap: 12px; align-items: center; margin-top: 4px; font-size: 0.75rem;">
+                                    <span class="${statusClass}">${statusLabel}</span>
+                                    ${stats ? `<span style="color: var(--text-secondary); opacity: 0.7;">${stats}</span>` : ''}
+                                    ${errorMsg ? `<span style="color: #EF4444; opacity: 0.9;">${escapeHtml(errorMsg)}</span>` : ''}
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <label class="rag-file-active-toggle" title="Include in RAG queries">
+                                    <input type="checkbox" data-file-id="${file.id}" ${file.is_active ? 'checked' : ''} class="rag-file-active-check">
+                                </label>
+                                <button class="rag-file-delete" data-file-id="${file.id}" title="Delete file">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        // Render chips with delete buttons
+        if (els.ragChipRow) {
+            if (files.length === 0) {
+                els.ragChipRow.innerHTML = '';
+            } else {
+                els.ragChipRow.innerHTML = files.map(file => {
+                    const ext = file.original_name.split('.').pop().toUpperCase();
+                    const isProcessing = this.processingIds.has(file.id);
+                    const isInactive = !file.is_active;
+                    const chipClass = isProcessing ? 'rag-chip processing' : (isInactive ? 'rag-chip inactive' : 'rag-chip');
+                    return `
+                        <div class="${chipClass}" data-file-id="${file.id}" title="${escapeHtml(file.original_name)}">
+                            <svg class="rag-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                                <polyline points="13 2 13 9 20 9"></polyline>
+                            </svg>
+                            <span class="rag-chip-label">${ext}</span>
+                            ${isProcessing ? '<span class="rag-chip-spinner">⟳</span>' : ''}
+                            <button class="rag-chip-delete" data-file-id="${file.id}" title="Delete file">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+    },
+
+    async setRagEnabled(enabled) {
+        try {
+            const response = await fetch(`/rag/settings?session_id=${encodeURIComponent(state.sessionId)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    rag_enabled: enabled
+                })
+            });
+            const data = await response.json();
+            if (data.ok) {
+                this.settings.rag_enabled = enabled ? 1 : 0;
+                console.log(`[RAG] Enabled: ${enabled}`);
+            }
+        } catch (e) {
+            console.error('[RAG] Failed to update enabled setting:', e);
+        }
+    },
+
+    async setAutoIndex(enabled) {
+        try {
+            const response = await fetch(`/rag/settings?session_id=${encodeURIComponent(state.sessionId)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    auto_index: enabled
+                })
+            });
+            const data = await response.json();
+            if (data.ok) {
+                this.settings.auto_index = enabled ? 1 : 0;
+                console.log(`[RAG] Auto-index: ${enabled}`);
+            }
+        } catch (e) {
+            console.error('[RAG] Failed to update auto-index setting:', e);
+        }
+    },
+
+    async setFileActive(fileId, isActive) {
+        try {
+            const response = await fetch(`/rag/file_active?session_id=${encodeURIComponent(state.sessionId)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    file_id: fileId,
+                    is_active: isActive
+                })
+            });
+            const data = await response.json();
+            if (data.ok) {
+                // Update local file list
+                const file = this.currentFiles.find(f => f.id === fileId);
+                if (file) {
+                    file.is_active = isActive;
+                    this.render(this.currentFiles);
+                }
+                console.log(`[RAG] File ${fileId} active: ${isActive}`);
+            }
+        } catch (e) {
+            console.error('[RAG] Failed to set file active:', e);
+        }
+    },
+
+    async startIndexing() {
+        if (this.indexStatus.state === 'running') {
+            console.warn('[RAG] Indexing already running');
+            return;
+        }
+
+        try {
+            // Start async indexing
+            const response = await fetch(`/rag/index_start?session_id=${encodeURIComponent(state.sessionId)}&force=false`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+
+            if (data.ok) {
+                this.indexStatus = data.status;
+                console.log('[RAG] Indexing started');
+
+                // Update UI
+                const embedBtn = document.getElementById('rag-embed-btn');
+                const cancelBtn = document.getElementById('rag-cancel-btn');
+                if (embedBtn) embedBtn.classList.add('hidden');
+                if (cancelBtn) cancelBtn.classList.remove('hidden');
+
+                // Poll for status updates
+                this.pollIndexStatus();
+            } else {
+                console.error('[RAG] Failed to start indexing:', data.error);
+                showToast('Failed to start indexing', 'error');
+            }
+        } catch (e) {
+            console.error('[RAG] Error starting indexing:', e);
+            showToast('Error starting indexing', 'error');
+        }
+    },
+
+    async cancelIndexing() {
+        try {
+            const response = await fetch(`/rag/index_cancel?session_id=${encodeURIComponent(state.sessionId)}`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+
+            if (data.ok) {
+                console.log('[RAG] Indexing cancelled');
+                this.indexStatus.state = 'idle';
+
+                // Update UI
+                const embedBtn = document.getElementById('rag-embed-btn');
+                const cancelBtn = document.getElementById('rag-cancel-btn');
+                if (embedBtn) embedBtn.classList.remove('hidden');
+                if (cancelBtn) cancelBtn.classList.add('hidden');
+
+                const statusLine = document.getElementById('rag-status-line');
+                if (statusLine) statusLine.textContent = 'Indexing cancelled';
+
+                // Stop polling
+                if (this.indexPollInterval) {
+                    clearInterval(this.indexPollInterval);
+                    this.indexPollInterval = null;
+                }
+            }
+        } catch (e) {
+            console.error('[RAG] Error cancelling indexing:', e);
+        }
+    },
+
+    pollIndexStatus() {
+        // Clear any existing poll
+        if (this.indexPollInterval) {
+            clearInterval(this.indexPollInterval);
+        }
+
+        let pollCount = 0;
+        const MAX_POLLS = 30; // 60 seconds at 2000ms intervals
+
+        // Poll every 2s (reduced from 500ms to minimize CPU overhead)
+        this.indexPollInterval = setInterval(async () => {
+            pollCount++;
+
+            // Timeout safeguard
+            if (pollCount >= MAX_POLLS) {
+                console.warn('[RAG] Polling timeout - stopping after 60s');
+                clearInterval(this.indexPollInterval);
+                this.indexPollInterval = null;
+                this.indexStatus.state = 'idle';
+
+                const statusLine = document.getElementById('rag-status-line');
+                if (statusLine) statusLine.textContent = 'Indexing timeout';
+                showToast('Indexing timeout - please try again', 'error');
+
+                // Reset UI
+                const embedBtn = document.getElementById('rag-embed-btn');
+                const cancelBtn = document.getElementById('rag-cancel-btn');
+                if (embedBtn) embedBtn.classList.remove('hidden');
+                if (cancelBtn) cancelBtn.classList.add('hidden');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/rag/index_status?session_id=${state.sessionId}`);
+                const data = await response.json();
+
+                if (data.ok) {
+                    // Backend returns data at top level, not nested in 'status'
+                    // Extract fields directly from data object
+                    const { ok, ...status } = data;
+                    this.indexStatus = status;
+                    const statusLine = document.getElementById('rag-status-line');
+
+                    if (this.indexStatus.state === 'running') {
+                        const progress = `Indexing: ${this.indexStatus.done_files || 0}/${this.indexStatus.total_files || 0} files`;
+                        if (statusLine) statusLine.textContent = progress;
+                    } else if (this.indexStatus.state === 'done') {
+                        if (statusLine) statusLine.textContent = `Indexed ${this.indexStatus.done_files} files successfully`;
+
+                        // Show success toast with instruction to use "From Files" button
+                        showToast(
+                            `Indexed ${this.indexStatus.done_files} file${this.indexStatus.done_files !== 1 ? 's' : ''} successfully!\n💡 Click "From Files" button to use them in chat.`,
+                            'success',
+                            5000  // Show for 5 seconds
+                        );
+
+                        // Reset UI
+                        const embedBtn = document.getElementById('rag-embed-btn');
+                        const cancelBtn = document.getElementById('rag-cancel-btn');
+                        if (embedBtn) embedBtn.classList.remove('hidden');
+                        if (cancelBtn) cancelBtn.classList.add('hidden');
+
+                        // Stop polling
+                        clearInterval(this.indexPollInterval);
+                        this.indexPollInterval = null;
+
+                        // Refresh file list to show updated status
+                        await this.refresh();
+
+                        // Highlight the From Files button if RAG is not already selected
+                        const ragBtn = document.querySelector('.tool-option[data-tool="rag_retrieve"]');
+                        if (ragBtn && !toolsUI.selectedTools.has('rag_retrieve')) {
+                            ragBtn.classList.add('rag-available');
+
+                            // Remove highlight after 10 seconds or when clicked
+                            const removeHighlight = () => {
+                                ragBtn.classList.remove('rag-available');
+                                ragBtn.removeEventListener('click', removeHighlight);
+                            };
+                            setTimeout(removeHighlight, 10000);
+                            ragBtn.addEventListener('click', removeHighlight, { once: true });
+                        }
+                    } else if (this.indexStatus.state === 'failed') {
+                        if (statusLine) statusLine.textContent = 'Indexing failed';
+                        showToast('Indexing failed', 'error');
+
+                        // Reset UI
+                        const embedBtn = document.getElementById('rag-embed-btn');
+                        const cancelBtn = document.getElementById('rag-cancel-btn');
+                        if (embedBtn) embedBtn.classList.remove('hidden');
+                        if (cancelBtn) cancelBtn.classList.add('hidden');
+
+                        // Stop polling
+                        clearInterval(this.indexPollInterval);
+                        this.indexPollInterval = null;
+                    } else if (this.indexStatus.state === 'idle') {
+                        // Indexing completed or not started - stop polling
+                        clearInterval(this.indexPollInterval);
+                        this.indexPollInterval = null;
+                    } else {
+                        // Unknown state - stop polling to prevent infinite loop
+                        console.warn('[RAG] Unknown index state:', this.indexStatus.state);
+                        clearInterval(this.indexPollInterval);
+                        this.indexPollInterval = null;
+                    }
+                }
+            } catch (e) {
+                console.error('[RAG] Error polling index status:', e);
+            }
+        }, 2000); // 2s instead of 500ms for 75% reduction in polling overhead
+    }
+};
 
 // --- UI HELPERS ---
 if(els.btnSidebarToggle) els.btnSidebarToggle.addEventListener('click', () => {
@@ -1652,6 +3086,14 @@ const updateStatus = (online, msg) => {
     els.modelStatus.textContent = online ? "STATUS: ONLINE" : "STATUS: OFFLINE";
     els.modelStatus.style.color = online ? "#10B981" : "#EF4444";
 };
+
+function updateSessionDisplay() {
+    const display = document.getElementById('session-id-display');
+    if (display) {
+        // Show first 12 chars of session ID
+        display.textContent = state.sessionId.substring(0, 12);
+    }
+}
 
 const appendMessage = (role, text) => {
     const msgDiv = document.createElement('div');
@@ -2465,16 +3907,50 @@ const api = {
             const res = await fetch('/sessions');
             const data = await res.json();
             els.sessionList.innerHTML = '';
-            if(data.sessions && data.sessions.length > 0) {
+            if (data.sessions && data.sessions.length > 0) {
                 data.sessions.forEach(s => {
                     const div = document.createElement('div');
                     div.className = `session-item ${s.id === state.sessionId ? 'active' : ''}`;
-                    div.textContent = s.title || s.id;
-                    div.onclick = () => { state.sessionId = s.id; api.getSessions(); api.loadHistory(); };
+
+                    const titleSpan = document.createElement('span');
+                    titleSpan.textContent = s.title || s.id;
+                    titleSpan.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;padding-right:20px;';
+                    div.appendChild(titleSpan);
+
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'session-delete';
+                    delBtn.textContent = '×';
+                    delBtn.title = 'Delete session';
+                    delBtn.onclick = async (e) => {
+                        e.stopPropagation();
+                        if (!confirm('Delete this session?')) return;
+                        try {
+                            await fetch(`/sessions/${s.id}`, { method: 'DELETE' });
+                            if (s.id === state.sessionId) {
+                                state.sessionId = 'sess_' + Date.now();
+                                els.chatHistory.innerHTML = '';
+                            }
+                            api.getSessions();
+                        } catch (err) { console.error('Delete session error:', err); }
+                    };
+                    div.appendChild(delBtn);
+
+                    div.onclick = () => {
+                        state.sessionId = s.id;
+                        api.getSessions();
+                        api.loadHistory();
+                        updateSessionDisplay();
+
+                        // Restore thinking preference for this session
+                        const thinkMode = getSessionThinkMode(s.id);
+                        setSessionThinkMode(s.id, thinkMode);
+                    };
                     els.sessionList.appendChild(div);
                 });
-            } else els.sessionList.innerHTML = '<div style=\"padding:10px; opacity:0.5; font-size:0.8rem;\">No active sessions</div>';
-        } catch(e) {}
+            } else {
+                els.sessionList.innerHTML = '<div style="padding:10px; opacity:0.5; font-size:0.8rem;">No sessions yet</div>';
+            }
+        } catch(e) { console.error('getSessions error:', e); }
     },
     loadModel: async () => {
         const name = els.modelSelect.value;
@@ -2504,9 +3980,47 @@ const api = {
             } else {
                 toggleSettings(false);
             }
-            els.chatHistory.innerHTML = '';
         } catch(e) { alert(`Error: ${e.message}`); updateStatus(false, "Error"); }
         finally { els.btnLoad.disabled = false; els.btnLoad.textContent = "LOAD MODEL"; }
+    },
+    unloadModel: async () => {
+        const btnUnload = document.getElementById('btn-unload');
+        if (!btnUnload) return;
+
+        btnUnload.disabled = true;
+        btnUnload.textContent = "UNLOADING...";
+
+        try {
+            const res = await fetch('/models/unload', { method: 'POST' });
+            if (!res.ok) throw new Error("Unload failed");
+
+            const data = await res.json();
+            state.modelLoaded = false;
+            els.modelDisplay.textContent = "No Model Loaded";
+            updateStatus(false, "Model Unloaded");
+
+            // Show confirmation toast
+            showToast("Model unloaded successfully", "success");
+        } catch(e) {
+            alert(`Error: ${e.message}`);
+            updateStatus(false, "Error");
+        } finally {
+            btnUnload.disabled = false;
+            btnUnload.textContent = "UNLOAD MODEL";
+        }
+    },
+    openModelsDir: async () => {
+        try {
+            const res = await fetch('/setup/open-models-dir', { method: 'POST' });
+            if (!res.ok) {
+                throw new Error('Failed to open folder');
+            }
+            // Optionally show success toast
+            // showToast('Opened models folder', 'success');
+        } catch (e) {
+            console.error('Error opening models folder:', e);
+            alert(`Could not open models folder: ${e.message}`);
+        }
     },
     getAppState: async () => {
         try {
@@ -2517,7 +4031,63 @@ const api = {
             return { tutorial_completed: true, current_model: null, defaults: {} };
         }
     },
-    chat: async (textOverride = null) => {
+    loadSystemPrompt: async () => {
+        try {
+            const res = await fetch('/settings/default-system-prompt');
+            if (!res.ok) throw new Error("Failed to load system prompt");
+            const data = await res.json();
+            if (els.systemPromptEditor) {
+                els.systemPromptEditor.value = data.prompt || "You are a helpful AI assistant.";
+            }
+        } catch(e) {
+            console.error("Error loading system prompt:", e);
+            if (els.systemPromptEditor) {
+                els.systemPromptEditor.value = "You are a helpful AI assistant.";
+            }
+        }
+    },
+    saveSystemPrompt: async () => {
+        if (!els.systemPromptEditor || !els.btnSavePrompt || !els.promptStatus) return;
+
+        const prompt = els.systemPromptEditor.value.trim();
+        if (!prompt) {
+            els.promptStatus.textContent = "Prompt cannot be empty";
+            els.promptStatus.style.color = "#ef4444";
+            return;
+        }
+
+        els.btnSavePrompt.disabled = true;
+        els.btnSavePrompt.textContent = "SAVING...";
+
+        try {
+            const res = await fetch('/settings/default-system-prompt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
+            });
+
+            if (!res.ok) throw new Error("Save failed");
+
+            els.promptStatus.textContent = "✓ Saved successfully";
+            els.promptStatus.style.color = "var(--accent)";
+            showToast("System prompt saved", "success");
+
+            setTimeout(() => { els.promptStatus.textContent = ""; }, 3000);
+        } catch(e) {
+            els.promptStatus.textContent = "✗ Save failed";
+            els.promptStatus.style.color = "#ef4444";
+        } finally {
+            els.btnSavePrompt.disabled = false;
+            els.btnSavePrompt.textContent = "SAVE";
+        }
+    },
+    resetSystemPrompt: () => {
+        if (els.systemPromptEditor && els.promptStatus) {
+            els.systemPromptEditor.value = "You are a helpful AI assistant.";
+            els.promptStatus.textContent = "";
+        }
+    },
+    chat: async (textOverride = null, voiceOpts = null) => {
         const promptText = textOverride || els.prompt.value.trim();
         if(!promptText || state.isGenerating) return;
         const welcome = document.querySelector('.welcome-container');
@@ -2528,6 +4098,7 @@ const api = {
         }
         state.isGenerating = true;
         let typeInterval = null;
+        let lastStreamStats = null;
 
         // Detect tutorial chat mode
         const isTutorialChat = document.body.classList.contains('first-run-tutorial') &&
@@ -2559,6 +4130,8 @@ const api = {
                 });
             } else {
                 // Normal chat mode - use /chat with session
+                const isAssistMode = (voiceOpts?.assistMode || toolsUI.selectedTools.has('assist_mode'));
+                const selectedTools = toolsUI.getSelectedTools().filter(t => t.type !== 'assist_mode');
                 res = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2567,54 +4140,174 @@ const api = {
                         max_tokens: 512,
                         temperature: parseFloat(els.inputs.temp.value),
                         session_id: state.sessionId,
-                        web_search_mode: state.webSearchMode,
+                        web_search_mode: isAssistMode ? 'off' : state.webSearchMode,
+                        tool_actions: selectedTools.length > 0 ? selectedTools : null,
+                        think_mode: getSessionThinkMode(state.sessionId),
+                        assist_mode: isAssistMode,
+                        input_mode: voiceOpts ? 'voice' : 'text'
                     })
                 });
+
+                // Clear one-shot tools after send
+                toolsUI.clearOneShot();
             }
 
             if (!res.body) throw new Error("No stream");
             let assistantMsgContent = "";
-            let displayedContent = "";
             let msgDiv = null;
-            let streamFinished = false;
-            let lastHighlightTime = 0;
-            const updateMarkdown = (txt, forceHighlight = false) => {
+            let assistantMsgEl = null;
+            let scrollPending = false;
+
+            // Throttled scroll using requestAnimationFrame
+            const scrollToBottom = () => {
+                if (scrollPending) return;
+                scrollPending = true;
+                requestAnimationFrame(() => {
+                    // Only scroll if user is near bottom (within 100px)
+                    const isNearBottom = els.chatHistory.scrollHeight - els.chatHistory.scrollTop - els.chatHistory.clientHeight < 100;
+                    if (isNearBottom) {
+                        els.chatHistory.scrollTop = els.chatHistory.scrollHeight;
+                    }
+                    scrollPending = false;
+                });
+            };
+
+            // Plain text update during streaming (no markdown parsing)
+            let rafScheduled = false;
+            const updatePlainText = () => {
                 if(!msgDiv) {
-                    const p = document.createElement('div');
-                    p.className = 'message ai-msg';
+                    assistantMsgEl = document.createElement('div');
+                    assistantMsgEl.className = 'message ai-msg';
                     const c = document.createElement('div');
                     c.className = 'msg-content markdown-body';
-                    p.appendChild(c);
-                    els.chatHistory.appendChild(p);
+                    assistantMsgEl.appendChild(c);
+                    els.chatHistory.appendChild(assistantMsgEl);
                     msgDiv = c;
                 }
-                msgDiv.innerHTML = marked.parse(txt);
-
-                // Throttle highlighting: only run every ~500ms or when forced
-                const now = Date.now();
-                if (forceHighlight || now - lastHighlightTime > 500) {
-                    msgDiv.querySelectorAll('pre code').forEach((block) => hljs.highlightElement(block));
-                    lastHighlightTime = now;
-                }
-
-                els.chatHistory.scrollTop = els.chatHistory.scrollHeight;
+                // Update as plain text (no markdown parsing during stream)
+                msgDiv.textContent = assistantMsgContent;
+                scrollToBottom();
+                rafScheduled = false;
             };
-            typeInterval = setInterval(() => {
-                if (displayedContent.length < assistantMsgContent.length) {
-                    const diff = assistantMsgContent.length - displayedContent.length;
-                    const chunk = diff > 120 ? 12 : (diff > 60 ? 6 : (diff > 30 ? 3 : 1));
-                    displayedContent += assistantMsgContent.substring(displayedContent.length, displayedContent.length + chunk);
-                    updateMarkdown(displayedContent);
-                } else if (streamFinished) {
-                    clearInterval(typeInterval);
-                    updateMarkdown(displayedContent, true); // Final highlight
-                    state.isGenerating = false;
+
+            // Throttled update using requestAnimationFrame (~60fps)
+            const scheduleUpdate = () => {
+                if (!rafScheduled) {
+                    rafScheduled = true;
+                    requestAnimationFrame(updatePlainText);
                 }
-            }, 30);
+            };
+
             await readSSE(res, (payload) => {
-                if (payload.content) assistantMsgContent += payload.content;
+                if (payload.content) {
+                    assistantMsgContent += payload.content;
+                    // Throttle updates to avoid excessive DOM reflows
+                    scheduleUpdate();
+
+                    // Detect tool results and show notifications
+                    const content = payload.content;
+
+                    // RAG errors
+                    if (content.includes('[ERROR]') && (content.includes('RAG') || content.includes('rag_retrieve'))) {
+                        if (content.includes('unavailable') || content.includes('not ready')) {
+                            showToast('RAG is not available. Check your files.', 'error');
+                        }
+                    }
+
+                    // Memory write success
+                    if (content.includes('[TOOL RESULT: memory_write]') && content.includes('Successfully saved')) {
+                        // Extract key from message if possible
+                        const keyMatch = content.match(/Tier [AB]\): (\w+)/);
+                        const key = keyMatch ? keyMatch[1] : 'information';
+                        showToast(`Saved to memory: ${key}`, 'success');
+                    }
+                }
+                // Capture stats event
+                if (payload.event_type === 'stats') {
+                    lastStreamStats = payload.stats;  // May be null on error — that's fine
+                }
             });
-            streamFinished = true;
+
+            // Final markdown render with syntax highlighting (after stream completes)
+            const parsed = parseThinking(assistantMsgContent);
+
+            if (parsed.hasThinking) {
+                // Build HTML with thinking status + content without thinking
+                let html = '';
+                parsed.blocks.forEach((block, index) => {
+                    const thinkingId = `thinking-${Date.now()}-${index}`;
+                    html += `
+                        <div class="thinking-status" data-thinking-id="${thinkingId}">
+                            <span class="thinking-label">💭 thinking...</span>
+                            <button class="thinking-toggle" aria-label="Show thinking">▼</button>
+                        </div>
+                        <div class="thinking-content hidden" data-thinking-id="${thinkingId}">
+                            <pre>${escapeHtml(block.content)}</pre>
+                        </div>
+                    `;
+                });
+
+                // Add remaining content (markdown-rendered)
+                html += marked.parse(parsed.textWithoutThinking);
+
+                assistantMsgEl.innerHTML = html;
+
+                // Apply syntax highlighting to code blocks
+                assistantMsgEl.querySelectorAll('pre code').forEach((block) => hljs.highlightElement(block));
+
+                // Attach toggle handlers
+                assistantMsgEl.querySelectorAll('.thinking-status').forEach(status => {
+                    status.addEventListener('click', (e) => {
+                        const id = status.dataset.thinkingId;
+                        const content = assistantMsgEl.querySelector(`.thinking-content[data-thinking-id="${id}"]`);
+                        const toggle = status.querySelector('.thinking-toggle');
+
+                        if (content && content.classList.contains('hidden')) {
+                            content.classList.remove('hidden');
+                            toggle.classList.add('expanded');
+                            toggle.textContent = '▲';
+                        } else if (content) {
+                            content.classList.add('hidden');
+                            toggle.classList.remove('expanded');
+                            toggle.textContent = '▼';
+                        }
+                    });
+                });
+            } else {
+                // No thinking - render markdown once with syntax highlighting
+                if (msgDiv) {
+                    msgDiv.innerHTML = marked.parse(assistantMsgContent);
+                    msgDiv.querySelectorAll('pre code').forEach((block) => hljs.highlightElement(block));
+                }
+            }
+
+            // Render stats below the assistant message
+            if (lastStreamStats && msgDiv) {
+                const statsDiv = document.createElement('div');
+                statsDiv.className = 'msg-stats';
+                const tps = lastStreamStats.tokens_per_second?.toFixed(1) || '—';
+                const tokens = lastStreamStats.tokens_generated || '—';
+                const timeMs = lastStreamStats.generation_time_ms;
+                const timeSec = timeMs ? (timeMs / 1000).toFixed(1) + 's' : '—';
+                statsDiv.innerHTML = `
+                    <span>${tps} tok/s</span>
+                    <span>·</span>
+                    <span>${tokens} tokens</span>
+                    <span>·</span>
+                    <span>${timeSec}</span>
+                `;
+                // msgDiv is .msg-content, go up to .message parent
+                const messageParent = msgDiv.parentElement;
+                if (messageParent) messageParent.appendChild(statsDiv);
+            }
+            // If lastStreamStats is null (error/unavailable), just don't render anything — clean degradation
+
+            state.isGenerating = false;
+
+            // Voice: trigger TTS on stream completion if a voice request is pending
+            if (voiceUI.pendingChatText !== null) {
+                voiceUI._onStreamComplete(assistantMsgContent);
+            }
 
             // Add assistant response to tutorial history if in tutorial mode
             if (isTutorialChat) {
@@ -2688,9 +4381,125 @@ const api = {
 
 if(els.modelSelect) els.modelSelect.addEventListener('change', api.updateModelMeta);
 if(els.btnLoad) els.btnLoad.addEventListener('click', api.loadModel);
+if(els.btnUnload) els.btnUnload.addEventListener('click', api.unloadModel);
+if(els.btnOpenModelsDir) els.btnOpenModelsDir.addEventListener('click', api.openModelsDir);
 if(els.sendBtn) els.sendBtn.addEventListener('click', () => api.chat());
-if(els.btnNewChat) els.btnNewChat.addEventListener('click', () => { state.sessionId = 'sess_' + Date.now(); api.getSessions(); els.chatHistory.innerHTML = ''; });
+if(els.btnNewChat) els.btnNewChat.addEventListener('click', () => {
+    state.sessionId = 'sess_' + Date.now();
+    api.getSessions();
+    els.chatHistory.innerHTML = '';
+    updateSessionDisplay();
+
+    // Initialize thinking as off for new session
+    setSessionThinkMode(state.sessionId, false);
+});
 if(els.prompt) els.prompt.addEventListener('keydown', (e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); api.chat(); } });
+
+// Think Toggle
+const thinkToggle = document.getElementById('think-toggle');
+if (thinkToggle) {
+    thinkToggle.addEventListener('click', () => {
+        const currentMode = getSessionThinkMode(state.sessionId);
+        setSessionThinkMode(state.sessionId, !currentMode);
+    });
+}
+
+// System Prompt Editor
+if(els.btnSavePrompt) els.btnSavePrompt.addEventListener('click', api.saveSystemPrompt);
+if(els.btnResetPrompt) els.btnResetPrompt.addEventListener('click', api.resetSystemPrompt);
+
+// === SYSTEM PROMPT MODAL ===
+function openSystemPromptModal() {
+    const modal = document.getElementById('system-prompt-modal');
+    const editor = document.getElementById('system-prompt-modal-editor');
+    const lengthDisplay = document.getElementById('modal-prompt-length');
+    // Load current prompt value from the hidden editor
+    const currentPrompt = els.systemPromptEditor ? els.systemPromptEditor.value : '';
+    editor.value = currentPrompt;
+    lengthDisplay.textContent = currentPrompt.length;
+    modal.classList.remove('hidden');
+    editor.focus();
+}
+
+function closeSystemPromptModal() {
+    document.getElementById('system-prompt-modal').classList.add('hidden');
+}
+
+// Open modal button
+const btnOpenPromptModal = document.getElementById('btn-open-prompt-modal');
+if (btnOpenPromptModal) btnOpenPromptModal.addEventListener('click', openSystemPromptModal);
+
+// Close: × button
+const btnClosePromptModal = document.getElementById('btn-close-prompt-modal');
+if (btnClosePromptModal) btnClosePromptModal.addEventListener('click', closeSystemPromptModal);
+
+// Close: click backdrop (not dialog)
+const systemPromptModal = document.getElementById('system-prompt-modal');
+if (systemPromptModal) {
+    systemPromptModal.addEventListener('click', (e) => {
+        if (e.target === systemPromptModal) closeSystemPromptModal();
+    });
+}
+
+// Close: Escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && systemPromptModal && !systemPromptModal.classList.contains('hidden')) {
+        closeSystemPromptModal();
+    }
+});
+
+// Char count update
+const modalEditor = document.getElementById('system-prompt-modal-editor');
+if (modalEditor) {
+    modalEditor.addEventListener('input', () => {
+        document.getElementById('modal-prompt-length').textContent = modalEditor.value.length;
+    });
+}
+
+// Profile chips: click to fill prompt
+document.querySelectorAll('.prompt-profile-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+        const prompt = chip.getAttribute('data-prompt');
+        const editor = document.getElementById('system-prompt-modal-editor');
+        if (editor && prompt) {
+            editor.value = prompt;
+            document.getElementById('modal-prompt-length').textContent = prompt.length;
+            // Highlight active chip
+            document.querySelectorAll('.prompt-profile-chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+        }
+    });
+});
+
+// Save button
+const btnModalSave = document.getElementById('btn-modal-save-prompt');
+if (btnModalSave) {
+    btnModalSave.addEventListener('click', async () => {
+        const editor = document.getElementById('system-prompt-modal-editor');
+        const prompt = editor.value;
+        // Sync to the hidden system prompt editor so existing code works
+        if (els.systemPromptEditor) els.systemPromptEditor.value = prompt;
+        // Save via existing API
+        await api.saveSystemPrompt();
+        closeSystemPromptModal();
+        showToast('System prompt saved', 'success');
+    });
+}
+
+// Reset button
+const btnModalReset = document.getElementById('btn-modal-reset-prompt');
+if (btnModalReset) {
+    btnModalReset.addEventListener('click', async () => {
+        await api.resetSystemPrompt();
+        // Re-read the value from the hidden editor after reset
+        const editor = document.getElementById('system-prompt-modal-editor');
+        if (editor && els.systemPromptEditor) {
+            editor.value = els.systemPromptEditor.value;
+            document.getElementById('modal-prompt-length').textContent = editor.value.length;
+        }
+        document.querySelectorAll('.prompt-profile-chip').forEach(c => c.classList.remove('active'));
+    });
+}
 
 // --- MEMORY MATRIX ---
 const loadAndRenderMemoryMatrix = async () => {
@@ -3017,42 +4826,721 @@ if(document.getElementById('btn-reset-tutorial')) {
     document.getElementById('btn-reset-tutorial').onclick = () => { localStorage.removeItem('localmind_first_run_complete'); window.location.reload(); };
 }
 
+// ============================================================
+// voiceUI — PTT voice module (Phase 1)
+// ============================================================
+const voiceUI = (() => {
+    // State machine: idle | listening | transcribing | confirming | waiting | speaking
+    let _state = 'idle';
+    let _audioCtx = null;
+    let _mediaStream = null;
+    let _workletNode = null;
+    let _audioChunks = [];   // Float32Array frames (WebAudio path)
+    let _mediaRecorder = null; // fallback path
+    let _mediaChunks = [];   // Blob chunks (fallback)
+    let _cancelTimer = null;
+    let _cancelInterval = null;
+    let _pendingChatText = null;
+    let _onDoneCallback = null;
+    let _useWorklet = (typeof AudioWorkletNode !== 'undefined');
+
+    const CANCEL_DELAY_MS = 1500;
+
+    // HA mode persisted in localStorage
+    function _getHaMode() {
+        return localStorage.getItem('voice_mode') === 'ha';
+    }
+    function _setHaMode(isHa) {
+        localStorage.setItem('voice_mode', isHa ? 'ha' : 'chat');
+        // Update toggle pill UI
+        els.voiceModeToggle?.querySelectorAll('.voice-mode-opt').forEach(btn => {
+            const active = btn.dataset.mode === (isHa ? 'ha' : 'chat');
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-pressed', String(active));
+        });
+    }
+
+    function _setState(s) {
+        _state = s;
+        if (!els.voiceMicBtn) return;
+        els.voiceMicBtn.classList.remove('listening', 'transcribing', 'speaking');
+        if (s === 'listening') els.voiceMicBtn.classList.add('listening');
+        else if (s === 'transcribing') els.voiceMicBtn.classList.add('transcribing');
+        else if (s === 'speaking') els.voiceMicBtn.classList.add('speaking');
+    }
+
+    // ---- WAV encoder ----
+    function _encodeWAV(chunks, sampleRate) {
+        // Flatten Float32 chunks into one buffer
+        const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+        const pcm = new Float32Array(totalLen);
+        let offset = 0;
+        for (const c of chunks) { pcm.set(c, offset); offset += c.length; }
+
+        // Convert Float32 → Int16 PCM
+        const int16 = new Int16Array(pcm.length);
+        for (let i = 0; i < pcm.length; i++) {
+            const s = Math.max(-1, Math.min(1, pcm[i]));
+            int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+
+        const dataBytes = int16.buffer.byteLength;
+        const buf = new ArrayBuffer(44 + dataBytes);
+        const view = new DataView(buf);
+        const ch = 1, bps = 16;
+        const byteRate = sampleRate * ch * bps / 8;
+        const blockAlign = ch * bps / 8;
+
+        // RIFF header
+        _writeStr(view, 0, 'RIFF');
+        view.setUint32(4, 36 + dataBytes, true);
+        _writeStr(view, 8, 'WAVE');
+        _writeStr(view, 12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);        // PCM
+        view.setUint16(22, ch, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, byteRate, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, bps, true);
+        _writeStr(view, 36, 'data');
+        view.setUint32(40, dataBytes, true);
+        new Uint8Array(buf, 44).set(new Uint8Array(int16.buffer));
+        return buf;
+    }
+    function _writeStr(view, offset, str) {
+        for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    }
+
+    // ---- Recording ----
+    async function _startRecording() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showToast('Microphone requires a secure context (localhost or HTTPS).', 'error');
+            return false;
+        }
+        try {
+            _mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        } catch (err) {
+            const msg = err.name === 'NotAllowedError'
+                ? 'Microphone permission denied. Check browser settings.'
+                : `Mic error: ${err.message}`;
+            showToast(msg, 'error');
+            return false;
+        }
+
+        _audioChunks = [];
+        _mediaChunks = [];
+
+        if (_useWorklet) {
+            try {
+                _audioCtx = new AudioContext({ sampleRate: 16000 });
+                const source = _audioCtx.createMediaStreamSource(_mediaStream);
+                await _audioCtx.audioWorklet.addModule('/static/js/pcm-recorder-worklet.js');
+                _workletNode = new AudioWorkletNode(_audioCtx, 'pcm-recorder');
+                _workletNode.port.onmessage = (e) => _audioChunks.push(e.data);
+                source.connect(_workletNode);
+                Logger.debug('Voice', 'AudioWorklet recording started at 16kHz');
+                return true;
+            } catch (e) {
+                Logger.debug('Voice', `AudioWorklet failed, falling back to MediaRecorder: ${e}`);
+                _useWorklet = false;
+                if (_audioCtx) { _audioCtx.close(); _audioCtx = null; }
+            }
+        }
+
+        // MediaRecorder fallback (sends webm — requires ffmpeg on server)
+        try {
+            _mediaRecorder = new MediaRecorder(_mediaStream);
+            _mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) _mediaChunks.push(e.data); };
+            _mediaRecorder.start(100);
+            Logger.debug('Voice', 'MediaRecorder fallback started');
+            return true;
+        } catch (e) {
+            showToast(`Recording failed: ${e.message}`, 'error');
+            return false;
+        }
+    }
+
+    async function _stopRecordingAndTranscribe() {
+        _setState('transcribing');
+
+        let blob, contentType;
+
+        if (_workletNode) {
+            // Stop worklet
+            _workletNode.port.postMessage('stop');
+            _workletNode.disconnect();
+            _workletNode = null;
+            if (_audioCtx) { await _audioCtx.close(); _audioCtx = null; }
+            // Encode accumulated chunks to WAV
+            const wavBuf = _encodeWAV(_audioChunks, 16000);
+            blob = new Blob([wavBuf], { type: 'audio/wav' });
+            contentType = 'audio/wav';
+        } else if (_mediaRecorder && _mediaRecorder.state !== 'inactive') {
+            // Stop MediaRecorder and wait for final data
+            await new Promise(res => {
+                _mediaRecorder.onstop = res;
+                _mediaRecorder.stop();
+            });
+            blob = new Blob(_mediaChunks, { type: _mediaRecorder.mimeType || 'audio/webm' });
+            contentType = blob.type;
+            _mediaRecorder = null;
+        } else {
+            _setState('idle');
+            return;
+        }
+
+        // Stop tracks
+        if (_mediaStream) { _mediaStream.getTracks().forEach(t => t.stop()); _mediaStream = null; }
+
+        if (blob.size < 100) {
+            showToast('No audio captured', 'error');
+            _setState('idle');
+            return;
+        }
+
+        // POST to /voice/transcribe
+        const t0 = performance.now();
+        const fd = new FormData();
+        fd.append('audio', blob, 'audio.' + (contentType.includes('wav') ? 'wav' : 'webm'));
+        try {
+            const resp = await fetch('/voice/transcribe', { method: 'POST', body: fd });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                showToast(`STT error: ${err.detail || resp.statusText}`, 'error');
+                _setState('idle');
+                return;
+            }
+            const data = await resp.json();
+            const sttMs = resp.headers.get('X-Voice-STT-Ms') || Math.round(performance.now() - t0);
+            Logger.debug('Voice', `STT: ${sttMs}ms → "${data.text}"`);
+            _onTranscript(data.text || '');
+        } catch (e) {
+            showToast(`STT request failed: ${e.message}`, 'error');
+            _setState('idle');
+        }
+    }
+
+    // ---- Cancel affordance ----
+    function _showCancelBar(delayMs, onSubmit) {
+        if (!els.voiceCancelBar) { onSubmit(); return; }
+        els.voiceCancelBar.removeAttribute('hidden');
+
+        const progress = els.voiceCancelBar.querySelector('.voice-cancel-progress');
+        const countdown = els.voiceCancelCountdown;
+        const startTime = performance.now();
+
+        // Animate progress bar shrinking from right
+        if (progress) {
+            progress.style.transition = 'none';
+            progress.style.transform = 'scaleX(1)';
+            requestAnimationFrame(() => {
+                progress.style.transition = `transform ${delayMs}ms linear`;
+                progress.style.transform = 'scaleX(0)';
+            });
+        }
+
+        // Countdown seconds
+        if (countdown) {
+            countdown.textContent = Math.ceil(delayMs / 1000);
+            _cancelInterval = setInterval(() => {
+                const remaining = delayMs - (performance.now() - startTime);
+                countdown.textContent = Math.max(1, Math.ceil(remaining / 1000));
+            }, 200);
+        }
+
+        _cancelTimer = setTimeout(() => {
+            _clearCancelBar();
+            onSubmit();
+        }, delayMs);
+    }
+
+    function _clearCancelBar() {
+        clearTimeout(_cancelTimer);
+        clearInterval(_cancelInterval);
+        _cancelTimer = null;
+        _cancelInterval = null;
+        els.voiceCancelBar?.setAttribute('hidden', '');
+        if (_state === 'confirming' || _state === 'waiting') _setState('idle');
+    }
+
+    function _cancelVoice() {
+        _clearCancelBar();
+        if (els.prompt) els.prompt.value = '';
+        _pendingChatText = null;
+        _setState('idle');
+    }
+
+    // ---- Transcript received ----
+    function _onTranscript(text) {
+        if (!text.trim()) {
+            showToast('Nothing heard — try again', 'info');
+            _setState('idle');
+            return;
+        }
+        if (els.prompt) els.prompt.value = text;
+        _setState('confirming');
+
+        _showCancelBar(CANCEL_DELAY_MS, () => {
+            _pendingChatText = text;
+            _setState('waiting');
+            // Submit via api.chat — voice submits with current haMode
+            api.chat(text, { assistMode: _getHaMode() });
+            // Notify wakeword callback if this PTT was triggered by wakeword
+            const cb = _onDoneCallback;
+            _onDoneCallback = null;
+            cb?.();
+        });
+    }
+
+    // ---- Stream complete — play TTS ----
+    async function _onStreamComplete(fullText) {
+        if (_pendingChatText === null) return;
+        _pendingChatText = null;
+
+        if (!fullText || !fullText.trim()) {
+            _setState('idle');
+            return;
+        }
+
+        // TTS disabled — reset state without speaking
+        _setState('idle');
+        return;
+
+        // Strip markdown and truncate for TTS
+        const plain = fullText
+            .replace(/```[\s\S]*?```/g, '')
+            .replace(/[`*_~#>]/g, '')
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            .trim()
+            .slice(0, 500);
+
+        _setState('speaking');
+
+        try {
+            const t0 = performance.now();
+            const resp = await fetch('/voice/speak', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: plain }),
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                Logger.debug('Voice', `TTS error: ${err.detail}`);
+                _setState('idle');
+                return;
+            }
+            const wavBuf = await resp.arrayBuffer();
+            const ttsMs = resp.headers.get('X-Voice-TTS-Ms') || Math.round(performance.now() - t0);
+            Logger.debug('Voice', `TTS: ${ttsMs}ms, ${wavBuf.byteLength} bytes`);
+
+            // Play via WebAudio
+            const playCtx = new AudioContext();
+            const decoded = await playCtx.decodeAudioData(wavBuf);
+            const source = playCtx.createBufferSource();
+            source.buffer = decoded;
+            source.connect(playCtx.destination);
+            source.onended = () => {
+                playCtx.close();
+                _setState('idle');
+            };
+            source.start();
+        } catch (e) {
+            Logger.debug('Voice', `TTS playback error: ${e}`);
+            _setState('idle');
+        }
+    }
+
+    // ---- Public API ----
+    async function init() {
+        // Check voice availability
+        let available = false;
+        try {
+            const resp = await fetch('/voice/status');
+            if (resp.ok) {
+                const s = await resp.json();
+                available = s.stt_loaded || true; // Show mic if endpoint exists; STT loads lazily
+                Logger.debug('Voice', 'Status:', s);
+                if (!s.tts_loaded) {
+                    Logger.debug('Voice', 'TTS not configured — mic visible but TTS will warn on use');
+                }
+            }
+        } catch (e) {
+            Logger.debug('Voice', `Status check failed: ${e}`);
+        }
+
+        if (!available) return;
+
+        // Show UI elements
+        els.voiceMicBtn?.removeAttribute('hidden');
+        els.voiceModeToggle?.removeAttribute('hidden');
+
+        // Restore mode preference
+        _setHaMode(_getHaMode());
+
+        // Mode toggle handlers
+        els.voiceModeToggle?.querySelectorAll('.voice-mode-opt').forEach(btn => {
+            btn.addEventListener('click', () => _setHaMode(btn.dataset.mode === 'ha'));
+        });
+
+        // Cancel bar button
+        els.voiceCancelBtn?.addEventListener('click', _cancelVoice);
+
+        // Mic button — PTT (mousedown/up + touch)
+        const onPressStart = async (e) => {
+            e.preventDefault();
+            if (_state !== 'idle') return;
+            _setState('listening');
+            const ok = await _startRecording();
+            if (!ok) _setState('idle');
+        };
+        const onPressEnd = async (e) => {
+            e.preventDefault();
+            if (_state === 'listening') {
+                await _stopRecordingAndTranscribe();
+            } else if (_state === 'speaking') {
+                // Interrupt TTS by clicking mic while speaking — just reset to idle
+                _setState('idle');
+            }
+        };
+
+        if (els.voiceMicBtn) {
+            els.voiceMicBtn.addEventListener('mousedown', onPressStart);
+            els.voiceMicBtn.addEventListener('mouseup', onPressEnd);
+            els.voiceMicBtn.addEventListener('touchstart', onPressStart, { passive: false });
+            els.voiceMicBtn.addEventListener('touchend', onPressEnd, { passive: false });
+        }
+    }
+
+    function triggerPTT(onDone) {
+        if (_state !== 'idle') return;
+        _onDoneCallback = onDone;
+        _setState('listening');
+        _startRecording().then(ok => {
+            if (!ok) {
+                _onDoneCallback = null;
+                _setState('idle');
+                onDone?.();
+                return;
+            }
+            // Auto-stop after 5s max
+            setTimeout(async () => {
+                if (_state === 'listening') await _stopRecordingAndTranscribe();
+            }, 5000);
+        });
+    }
+
+    return { init, triggerPTT, _onStreamComplete, get haMode() { return _getHaMode(); }, get pendingChatText() { return _pendingChatText; }, get isIdle() { return _state === 'idle'; } };
+})();
+
+// ============================================================
+// wakewordUI — browser-side wakeword detection via WebSocket
+// ============================================================
+const wakewordUI = (() => {
+    const LS_KEY = 'wakeword_enabled';
+    const FRAME_SAMPLES = 1280;          // samples per frame
+    const FRAME_BYTES = FRAME_SAMPLES * 2; // Int16 = 2 bytes/sample
+
+    let _ws = null;
+    let _audioCtx = null;
+    let _mediaStream = null;
+    let _workletNode = null;
+    let _floatBuf = new Float32Array(FRAME_SAMPLES);
+    let _floatPos = 0;
+    let _reconnectTimer = null;
+    let _enabling = false;  // guard against concurrent enable() calls
+    let _daemonPollInterval = null;
+
+    function _isEnabled() { return localStorage.getItem(LS_KEY) === '1'; }
+    function _setEnabled(v) { localStorage.setItem(LS_KEY, v ? '1' : '0'); }
+
+    function _updateToggleUI(active) {
+        els.wakewordToggleBtn?.classList.toggle('active', active);
+        els.wakewordToggleBtn?.setAttribute('title', active ? 'Wake word: ON' : 'Wake word: OFF');
+    }
+
+    function _setStateLabel(state) {
+        const label = document.getElementById('wakeword-state-label');
+        if (!label) return;
+        const MAP = {
+            idle:         { text: 'listening',     triggered: false },
+            recording:    { text: 'triggered!',    triggered: true  },
+            transcribing: { text: 'transcribing…', triggered: true  },
+            submitting:   { text: 'processing…',   triggered: true  },
+            cooldown:     { text: 'done',          triggered: false },
+            disabled:     { text: '',              triggered: false },
+        };
+        const s = MAP[state] || { text: state, triggered: false };
+        label.textContent = s.text;
+        els.wakewordToggleBtn?.classList.toggle('triggered', s.triggered);
+    }
+
+    function _startDaemonPoll() {
+        _stopDaemonPoll();   // idempotent
+        _daemonPollInterval = setInterval(async () => {
+            try {
+                const r = await fetch('/voice/wakeword/status');
+                if (!r.ok) return;
+                const d = await r.json();
+                _setStateLabel(d.state || 'disabled');
+            } catch { /* server unreachable — ignore */ }
+        }, 1500);
+    }
+
+    function _stopDaemonPoll() {
+        clearInterval(_daemonPollInterval);
+        _daemonPollInterval = null;
+        _setStateLabel('disabled');
+    }
+
+    function _batchAndSend(float32Chunk) {
+        if (!_ws || _ws.readyState !== WebSocket.OPEN) return;
+        let src = 0;
+        while (src < float32Chunk.length) {
+            const space = FRAME_SAMPLES - _floatPos;
+            const copy = Math.min(space, float32Chunk.length - src);
+            _floatBuf.set(float32Chunk.subarray(src, src + copy), _floatPos);
+            _floatPos += copy;
+            src += copy;
+            if (_floatPos >= FRAME_SAMPLES) {
+                // Convert Float32 → Int16
+                const int16 = new Int16Array(FRAME_SAMPLES);
+                for (let i = 0; i < FRAME_SAMPLES; i++) {
+                    const s = Math.max(-1, Math.min(1, _floatBuf[i]));
+                    int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                }
+                _ws.send(int16.buffer);
+                _floatPos = 0;
+            }
+        }
+    }
+
+    async function _openStream() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error('Microphone requires a secure context (localhost or HTTPS).');
+        }
+        _mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        _audioCtx = new AudioContext({ sampleRate: 16000 });
+        const source = _audioCtx.createMediaStreamSource(_mediaStream);
+        await _audioCtx.audioWorklet.addModule('/static/js/pcm-recorder-worklet.js');
+        _workletNode = new AudioWorkletNode(_audioCtx, 'pcm-recorder');
+        _workletNode.port.onmessage = (e) => _batchAndSend(e.data);
+        source.connect(_workletNode);
+        Logger.debug('Wakeword', 'Audio stream opened at 16kHz');
+    }
+
+    function _openWS() {
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        let wsUrl = `${proto}//${location.host}/voice/wakeword/ws`;
+        if (window._LOCALIS_VOICE_KEY) {
+            wsUrl += `?key=${encodeURIComponent(window._LOCALIS_VOICE_KEY)}`;
+        }
+        _ws = new WebSocket(wsUrl);
+        _ws.binaryType = 'arraybuffer';
+
+        _ws.onmessage = (e) => {
+            let data;
+            try { data = JSON.parse(e.data); } catch { return; }
+            if (data.event === 'ready') {
+                Logger.debug('Wakeword', 'Backend ready');
+                _updateToggleUI(true);
+            } else if (data.event === 'wake') {
+                Logger.debug('Wakeword', `Wake detected score=${data.score}`);
+                _onWake(data.score);
+            } else if (data.event === 'error') {
+                showToast(`Wakeword error: ${data.message}`, 'error');
+                disable();
+            }
+        };
+
+        _ws.onclose = () => {
+            _ws = null;
+            if (_isEnabled()) {
+                // Schedule reconnect only if we weren't deliberately disabled
+                _reconnectTimer = setTimeout(() => {
+                    if (_isEnabled()) enable();
+                }, 2000);
+            }
+        };
+
+        _ws.onerror = (e) => {
+            Logger.debug('Wakeword', `WS error: ${e}`);
+        };
+    }
+
+    function _onWake(score) {
+        // Ignore wake events that arrive while PTT is already active (e.g. manual hold)
+        if (!voiceUI.isIdle) return;
+
+        _setStateLabel('recording');   // immediate feedback before PTT takes over
+        _floatPos = 0;
+
+        // Cancel any pending reconnect before closing, so onclose doesn't schedule another
+        clearTimeout(_reconnectTimer);
+        _reconnectTimer = null;
+
+        // Detach onclose BEFORE calling close() — prevents the reconnect-timer path
+        // from firing asynchronously while PTT mic is active (bug: double stream open)
+        if (_ws) {
+            _ws.onclose = null;
+            _ws.close();
+            _ws = null;
+        }
+
+        // Release wakeword mic now so PTT can acquire its own clean stream
+        _stopStream();
+
+        voiceUI.triggerPTT(() => {
+            // After transcription submitted, restart wakeword if still enabled
+            if (_isEnabled()) {
+                setTimeout(() => enable(), 500);
+            }
+        });
+    }
+
+    function _stopStream() {
+        _workletNode?.port.postMessage('stop');
+        _workletNode?.disconnect();
+        _workletNode = null;
+        if (_audioCtx) { _audioCtx.close(); _audioCtx = null; }
+        _mediaStream?.getTracks().forEach(t => t.stop());
+        _mediaStream = null;
+        _floatPos = 0;
+    }
+
+    async function enable() {
+        // Guard: drop concurrent calls (e.g. reconnect timer fires while mic dialog is open)
+        if (_enabling) return;
+        if (_ws && _ws.readyState === WebSocket.OPEN) return;
+        _enabling = true;
+        clearTimeout(_reconnectTimer);
+        _reconnectTimer = null;
+        // Always close any leftover stream before opening a new one (prevents track leaks)
+        _stopStream();
+        try {
+            await _openStream();
+        } catch (err) {
+            _enabling = false;
+            const msg = err.name === 'NotAllowedError'
+                ? 'Microphone permission denied. Wake word disabled.'
+                : `Wakeword mic error: ${err.message}`;
+            showToast(msg, 'error');
+            _setEnabled(false);
+            _updateToggleUI(false);
+            return;
+        }
+        _enabling = false;
+        _openWS();
+        _startDaemonPoll();
+    }
+
+    function disable() {
+        _setEnabled(false);
+        clearTimeout(_reconnectTimer);
+        _reconnectTimer = null;
+        _ws?.close();
+        _ws = null;
+        _stopStream();
+        _updateToggleUI(false);
+        _stopDaemonPoll();
+    }
+
+    async function init() {
+        // Only show toggle if voice is available
+        let available = false;
+        try {
+            const resp = await fetch('/voice/status');
+            if (resp.ok) available = true;
+        } catch { /* voice not available */ }
+        if (!available) return;
+
+        els.wakewordToggleBtn?.removeAttribute('hidden');
+
+        // Restore persisted state
+        if (_isEnabled()) enable();
+
+        // If daemon already running (enabled by another client / curl), start polling
+        try {
+            const sr = await fetch('/voice/wakeword/status');
+            if (sr.ok) {
+                const sd = await sr.json();
+                if (sd.enabled) _startDaemonPoll();
+            }
+        } catch { /* ignore */ }
+
+        // Wire toggle click
+        els.wakewordToggleBtn?.addEventListener('click', () => {
+            if (_isEnabled()) {
+                disable();
+            } else {
+                _setEnabled(true);
+                enable();
+            }
+        });
+    }
+
+    return { init, enable, disable, get enabled() { return _isEnabled(); } };
+})();
+
 const startApp = async () => {
     console.log('startApp called');
     document.body.classList.add('app-ready');
     document.getElementById('boot-screen').classList.add('hidden');
 
+    // Load session preferences from localStorage
+    loadSessionPreferences();
+
     // Always fetch state/models first
     await api.getModels();
     let appState = await api.getAppState();
 
-    console.log('App state:', appState);
+    // Enable debug logging based on backend flag
+    Logger.setEnabled(appState.debug === true);
+    Logger.debug('App', 'App state loaded', appState);
 
     // Setup Wizard (download or skip tutorial model) — fail-open
     if (window.SetupWizard && typeof window.SetupWizard.maybeRun === "function") {
-        await window.SetupWizard.maybeRun(appState);
-    }
-    // Run setup wizard before tutorial if no models exist yet
-    if (window.SetupWizard && typeof window.SetupWizard.maybeRun === "function") {
-        await window.SetupWizard.maybeRun(appState);
-        await api.getModels();              // refresh model list after download/skip
-        appState = await api.getAppState(); // refresh app state
+        const wizardRan = await window.SetupWizard.maybeRun(appState);
+        // Refresh models/state after wizard completes (whether it downloaded or user added model)
+        if (wizardRan) {
+            await api.getModels();              // refresh model list after download/skip
+            appState = await api.getAppState(); // refresh app state
+        }
     }
 
 
     if (isFirstRun()) {
-        console.log('First run detected, entering tutorial');
+        Logger.debug('App', 'First run detected, entering tutorial');
         enterFirstRunStep1();
         return;
     }
 
-    console.log('Returning user, loading normal interface');
+    Logger.debug('App', 'Returning user, loading normal interface');
     state.sidebarCollapsed = true;
     if(els.sidebar) els.sidebar.classList.add('collapsed');
     await api.getSessions();
     await api.loadHistory();
     updateAccent(AppSettings.get('accent', '#ffffff'));
-};
+
+    // Restore thinking mode for current session
+    const thinkMode = getSessionThinkMode(state.sessionId);
+    setSessionThinkMode(state.sessionId, thinkMode);
+
+    // Initialize Tools Picker
+    toolsUI.init();
+
+    // Initialize Voice UI (async, non-blocking — shows mic if /voice/status available)
+    voiceUI.init().catch(e => Logger.debug('Voice', `init error: ${e}`));
+
+    // Initialize Wakeword UI (depends on voice availability, runs after voiceUI)
+    wakewordUI.init().catch(e => Logger.debug('Wakeword', `init error: ${e}`));
+
+    // Load system prompt
+    api.loadSystemPrompt();
+
+    // Update session display
+    updateSessionDisplay();
+}
 
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', () => {

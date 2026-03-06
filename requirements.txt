@@ -2,10 +2,18 @@ fastapi
 uvicorn[standard]
 python-dotenv
 pydantic
+
 llama-cpp-python
 httpx
+
 numpy
 sentence-transformers
+
 python-multipart
 aiofiles
 huggingface-hub
+chromadb
+
+# RAG extraction deps (needed by app/rag_processing.py)
+pypdf
+python-docx
