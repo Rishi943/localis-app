@@ -1564,6 +1564,31 @@ const els = {
     },
     btnStopServer: document.getElementById('btn-stop-server'),
     stopServerStatus: document.getElementById('stop-server-status'),
+    // New elements — right sidebar quick controls (UI redesign)
+    rsbLightsName:   document.getElementById('rsb-lights-name'),
+    rsbLightsToggle: document.getElementById('rsb-lights-toggle'),
+    rsbLightsPct:    document.getElementById('rsb-lights-pct'),
+    rsbLightsAgo:    document.getElementById('rsb-lights-ago'),
+    rsbBulbFill:     document.getElementById('rsb-bulb-fill'),
+    rsbBulbLine:     document.getElementById('rsb-bulb-line'),
+    rsbModelName:    document.getElementById('rsb-model-name'),
+    rsbModelStatus:  document.getElementById('rsb-model-status'),
+    rsbModelChips:   document.getElementById('rsb-model-chips'),
+    rsbCpuVal:       document.getElementById('rsb-cpu-val'),
+    rsbCpuBar:       document.getElementById('rsb-cpu-bar'),
+    rsbRamVal:       document.getElementById('rsb-ram-val'),
+    rsbRamBar:       document.getElementById('rsb-ram-bar'),
+    rsbVramVal:      document.getElementById('rsb-vram-val'),
+    rsbVramBar:      document.getElementById('rsb-vram-bar'),
+    rsbCtxAscii:     document.getElementById('rsb-ctx-ascii'),
+    rsbCtxTokens:    document.getElementById('rsb-ctx-tokens'),
+    rsbCtxPct:       document.getElementById('rsb-ctx-pct'),
+    modalProfileTags:      document.getElementById('modal-profile-tags'),
+    btnEditPromptSidebar:  document.getElementById('btn-edit-prompt-sidebar'),
+    leftSidebarToggle:     document.getElementById('left-sidebar-toggle'),
+    rightSidebarToggle:    document.getElementById('right-sidebar-toggle'),
+    tbModelName:           document.getElementById('tb-model-name'),
+    btnTopSettings:        document.getElementById('btn-top-settings'),
 };
 
 // ============================================================
@@ -2386,6 +2411,60 @@ const toolsUI = {
     }
 };
 
+// ── modePills — Mode pill toggles (replaces toolsUI chip/modal UX) ──────────
+const modePills = (() => {
+  const PILL_TO_TOOL = {
+    'web_search':   'web_search',
+    'assist_mode':  'assist_mode',
+    'rag_upload':   null,           // triggers file picker, no mode flag
+    'memory_write': 'memory_write',
+  };
+
+  function _syncToToolsUI() {
+    // Mirror pill state into toolsUI.selectedTools so the send path at line ~4150
+    // continues to work without modification.
+    if (!toolsUI || !toolsUI.selectedTools) return;
+    toolsUI.selectedTools.clear();
+    document.querySelectorAll('.mode-pill.active').forEach(pill => {
+      const tool = pill.dataset.tool;
+      if (PILL_TO_TOOL[tool]) toolsUI.selectedTools.add(PILL_TO_TOOL[tool]);
+    });
+  }
+
+  function _togglePill(pillEl) {
+    const tool = pillEl.dataset.tool;
+    if (tool === 'rag_upload') {
+      // Don't toggle — just open file picker
+      const fi = document.getElementById('from-file-input');
+      if (fi) fi.click();
+      return;
+    }
+    pillEl.classList.toggle('active');
+    _syncToToolsUI();
+  }
+
+  function init() {
+    document.querySelectorAll('.mode-pill').forEach(pill => {
+      pill.addEventListener('click', () => _togglePill(pill));
+    });
+
+    // Restore sticky tools from toolsUI into pill state on init
+    if (toolsUI && toolsUI.stickyTools) {
+      if (toolsUI.stickyTools.has('assist_mode')) {
+        const p = document.getElementById('pill-home');
+        if (p) p.classList.add('active');
+      }
+      if (toolsUI.stickyTools.has('web_search')) {
+        const p = document.getElementById('pill-web');
+        if (p) p.classList.add('active');
+      }
+    }
+    _syncToToolsUI();
+  }
+
+  return { init };
+})();
+
 const ragUI = {
     currentFiles: [],
     ready: false,
@@ -3082,6 +3161,13 @@ if(els.btnCloseSettings) els.btnCloseSettings.onclick = () => {
     toggleSettings(false);
 }
 if(els.modelDisplay) els.modelDisplay.onclick = () => toggleSettings(true);
+// Wire top-bar settings button
+if (els.btnTopSettings) {
+    els.btnTopSettings.addEventListener('click', () => {
+        // Delegate to existing settings toggle
+        if (els.btnOpenSettings) els.btnOpenSettings.click();
+    });
+}
 
 if(els.prompt) els.prompt.addEventListener('input', function() {
     this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px';
@@ -5659,6 +5745,7 @@ const startApp = async () => {
 
     // Initialize Tools Picker
     toolsUI.init();
+    modePills.init();  // Wire mode pill toggles after toolsUI is ready
 
     // Initialize Voice UI (async, non-blocking — shows mic if /voice/status available)
     voiceUI.init().catch(e => Logger.debug('Voice', `init error: ${e}`));
