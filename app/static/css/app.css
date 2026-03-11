@@ -7,19 +7,21 @@
 
         /* Colors (Pitch Black & Coherent) */
         --bg-app: #000000;       /* True Black */
-        --bg-sidebar: rgba(8, 8, 10, 0.95);
-        --bg-panel: #020202;     /* Near Black */
+        --bg-sidebar: rgba(10, 10, 10, 0.55);
+        --bg-panel: rgba(15, 15, 15, 0.45);
         --bg-input: #0a0a0c;
         --bg-msg-user: #1a1a1d;
         --bg-msg-ai: transparent;
         --bg-overlay: rgba(0, 0, 0, 0.7);
 
-        --text-primary: #f4f4f5; /* Zinc 100 */
+        --text-primary: #ffffff;
         --text-secondary: #a1a1aa; /* Zinc 400 */
         --text-accent: #ffffff;
 
-        --border-subtle: rgba(255,255,255,0.08);
+        --border-subtle: rgba(255, 255, 255, 0.15);
         --border-focus: rgba(255,255,255,0.15);
+        --glass-filter: blur(24px) saturate(180%);
+        --border-highlight: rgba(255, 255, 255, 0.05);
 
         --btn-primary-bg: #fafafa;
         --btn-primary-fg: #000000;
