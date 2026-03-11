@@ -2465,6 +2465,41 @@ const modePills = (() => {
   return { init };
 })();
 
+// ── Sidebar collapse toggles ─────────────────────────────────────────────────
+(function initSidebarToggles() {
+  const lsb = document.getElementById('left-sidebar');
+  const rsb = document.getElementById('right-sidebar');
+  const rsbRail = document.getElementById('right-rail');
+
+  function toggleLeft() {
+    if (!lsb) return;
+    const collapsed = lsb.classList.toggle('collapsed');
+    const btn = document.getElementById('left-sidebar-toggle');
+    if (btn) {
+      const use = btn.querySelector('use');
+      if (use) use.setAttribute('href', collapsed ? '#ico-right' : '#ico-left');
+    }
+  }
+
+  function toggleRight() {
+    if (!rsb) return;
+    const collapsed = rsb.classList.toggle('collapsed');
+    if (rsbRail) rsbRail.classList.toggle('hidden', !collapsed);
+    const btn = document.getElementById('right-sidebar-toggle');
+    if (btn) {
+      const use = btn.querySelector('use');
+      if (use) use.setAttribute('href', collapsed ? '#ico-left' : '#ico-right');
+    }
+  }
+
+  const lBtn = document.getElementById('left-sidebar-toggle');
+  const rBtn = document.getElementById('right-sidebar-toggle');
+  const rRailBtn = document.getElementById('right-rail-toggle');
+  if (lBtn) lBtn.addEventListener('click', toggleLeft);
+  if (rBtn) rBtn.addEventListener('click', toggleRight);
+  if (rRailBtn) rRailBtn.addEventListener('click', toggleRight);
+})();
+
 const ragUI = {
     currentFiles: [],
     ready: false,
