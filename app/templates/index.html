@@ -7,7 +7,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@500;700&family=Fira+Code:wght@400;600&family=Comic+Neue:wght@400;700&family=VT323&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
@@ -304,7 +304,6 @@
         <button id="btn-rail-model" class="rail-btn" title="ModelSelection">◈</button>
         <button id="btn-rail-temp" class="rail-btn" title="Temperature">⚡</button>
         <button id="btn-rail-memory" class="rail-btn" title="Memory">💾</button>
-        <button id="btn-rail-appearance" class="rail-btn" title="Appearance">◑</button>
     </div>
 
     <!-- Tools Picker Modal -->
@@ -491,19 +490,18 @@
             <div class="row-spread"><label>Accent Color</label><input type="color" id="picker-accent" value="#ffffff" style="width:60px; height:30px; padding:0; border:none; background:none;"></div>
         </div>
 
-        <div class="setting-group" id="grp-theme">
-            <label>Interface Theme</label>
-            <select id="theme-select">
-                <option value="theme-default">Dark (Default)</option>
-                <option value="theme-tui">Terminal (TUI)</option>
-                <option value="theme-brutalist">Neo-Brutalist</option>
-                <option value="theme-onepiece">Grand Line (One Piece)</option>
-            </select>
-        </div>
 
         <!-- DEV BUTTON (Temporary Reset Tutorial Button) -->
         <div class="setting-group" style="display:none;">
             <button id="btn-reset-tutorial" class="btn-full" style="background:#EF4444; color:white; font-size:0.8rem; margin-top: 10px;">[DEV] RESET TUTORIAL</button>
+        </div>
+
+        <div class="setting-group" id="grp-server-control">
+          <label>Server</label>
+          <button type="button" id="btn-stop-server" class="btn-full btn-danger">
+            Stop Server &amp; Export Logs
+          </button>
+          <p id="stop-server-status" class="setting-hint" style="display:none;"></p>
         </div>
     </div>
 </div>
