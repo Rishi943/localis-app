@@ -1552,6 +1552,7 @@ const els = {
     voiceStatusBar: document.getElementById('voice-status-bar'),
     voiceStatusLabel: document.querySelector('#voice-status-bar .voice-status-label'),
     voiceStatusTag: document.querySelector('#voice-status-bar .voice-status-tag'),
+    voiceStatusDot: document.querySelector('#voice-status-bar .voice-status-dot'),
     inputs: {
         layers: document.getElementById('num-layers'),
         ctx: document.getElementById('num-ctx'),
@@ -1610,7 +1611,7 @@ const voiceStatusBar = (() => {
     function setDone() {
         clearTimeout(_doneTimer);
         _apply('done');
-        _doneTimer = setTimeout(() => _apply('idle'), 2000);
+        _doneTimer = setTimeout(() => setState('idle'), 2000);
     }
 
     function init() {
