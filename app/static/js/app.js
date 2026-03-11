@@ -1552,7 +1552,6 @@ const els = {
     voiceStatusBar: document.getElementById('voice-status-bar'),
     voiceStatusLabel: document.querySelector('#voice-status-bar .voice-status-label'),
     voiceStatusTag: document.querySelector('#voice-status-bar .voice-status-tag'),
-    voiceStatusDot: document.querySelector('#voice-status-bar .voice-status-dot'),
     inputs: {
         layers: document.getElementById('num-layers'),
         ctx: document.getElementById('num-ctx'),
@@ -3120,7 +3119,6 @@ const updateAccent = (color) => {
 };
 if(elAccent) elAccent.addEventListener('input', (e) => updateAccent(e.target.value));
 
-const savedTheme = localStorage.getItem('local_ai_theme');
 // Theme selector removed — theme is now fixed (midnight-glass via CSS variables)
 
 const updateStatus = (online, msg) => {
@@ -4147,6 +4145,7 @@ const api = {
         // Detect tutorial chat mode
         const isTutorialChat = document.body.classList.contains('first-run-tutorial') &&
                                document.body.classList.contains('frt-split-with-chat');
+        const isAssistMode = !isTutorialChat && (voiceOpts?.assistMode || toolsUI.selectedTools.has('assist_mode'));
 
         try {
             let res;
@@ -4174,7 +4173,6 @@ const api = {
                 });
             } else {
                 // Normal chat mode - use /chat with session
-                const isAssistMode = (voiceOpts?.assistMode || toolsUI.selectedTools.has('assist_mode'));
                 const selectedTools = toolsUI.getSelectedTools().filter(t => t.type !== 'assist_mode');
                 res = await fetch('/chat', {
                     method: 'POST',
