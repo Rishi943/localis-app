@@ -2573,6 +2573,7 @@ if (els.rsbLightsToggle) {
 // ── rsbStats — System stats + context bar polling ───────────────────────────
 const rsbStats = (() => {
   let _statsTimer = null;
+  let _ctxChars = 0;
 
   function _ascii(pct, len = 20) {
     const filled = Math.round(pct / 100 * len);
@@ -2600,9 +2601,7 @@ const rsbStats = (() => {
 
   function updateContextBar() {
     const nCtx = state.nCtx || 8192;
-    const history = state.conversationHistory || [];
-    const totalChars = history.reduce((s, m) => s + (m.content?.length || 0), 0);
-    const tokenEst = Math.ceil(totalChars / 4);
+    const tokenEst = Math.ceil(_ctxChars / 4);
     const pct = Math.min(100, Math.round(tokenEst / nCtx * 100));
 
     if (els.rsbCtxAscii) els.rsbCtxAscii.textContent = _ascii(pct);
@@ -2614,6 +2613,11 @@ const rsbStats = (() => {
     if (els.rsbCtxPct) els.rsbCtxPct.textContent = `${pct}%`;
   }
 
+  function addChars(n) {
+    _ctxChars += n;
+    updateContextBar();
+  }
+
   function start() {
     _refreshStats();
     _statsTimer = setInterval(_refreshStats, 3000);
@@ -2623,7 +2627,7 @@ const rsbStats = (() => {
     if (_statsTimer) { clearInterval(_statsTimer); _statsTimer = null; }
   }
 
-  return { start, stop, updateContextBar };
+  return { start, stop, updateContextBar, addChars };
 })();
 
 const ragUI = {
@@ -3408,6 +3412,7 @@ const appendMessage = (role, text) => {
     msgDiv.appendChild(content);
     els.chatHistory.appendChild(msgDiv);
     els.chatHistory.scrollTop = els.chatHistory.scrollHeight;
+    rsbStats.addChars(text.length);
 };
 
 const endTutorial = async () => {
@@ -4267,6 +4272,8 @@ const api = {
             if(!res.ok) throw new Error("Load failed");
             const data = await res.json();
             state.modelLoaded = true; els.modelDisplay.textContent = data.loaded;
+            state.nCtx = parseInt(els.inputs.ctx.value) || 8192;
+            rsbStats.updateContextBar();
             updateStatus(true, "Ready");
 
             if (document.body.classList.contains('first-run-tutorial')) {
@@ -4527,6 +4534,12 @@ const api = {
                     lastStreamStats = payload.stats;  // May be null on error — that's fine
                 }
             });
+
+            // Count assistant message chars for context bar (normal chat only;
+            // tutorial mode tracks its own history and calls updateContextBar directly)
+            if (!isTutorialChat) {
+                rsbStats.addChars(assistantMsgContent.length);
+            }
 
             // Final markdown render with syntax highlighting (after stream completes)
             const parsed = parseThinking(assistantMsgContent);
