@@ -2570,6 +2570,62 @@ if (els.rsbLightsToggle) {
   });
 }
 
+// ── rsbStats — System stats + context bar polling ───────────────────────────
+const rsbStats = (() => {
+  let _statsTimer = null;
+
+  function _ascii(pct, len = 20) {
+    const filled = Math.round(pct / 100 * len);
+    return '█'.repeat(filled) + '░'.repeat(len - filled);
+  }
+
+  async function _refreshStats() {
+    try {
+      const r = await fetch('/api/system-stats');
+      if (!r.ok) return;
+      const d = await r.json();
+      if (els.rsbCpuVal) els.rsbCpuVal.textContent = Math.round(d.cpu_pct);
+      if (els.rsbCpuBar) els.rsbCpuBar.style.width = `${d.cpu_pct}%`;
+      if (els.rsbRamVal) els.rsbRamVal.textContent = d.ram_used_gb;
+      if (els.rsbRamBar) els.rsbRamBar.style.width = `${Math.round(d.ram_used_gb / d.ram_total_gb * 100)}%`;
+      if (els.rsbVramVal) els.rsbVramVal.textContent = d.vram_used_gb;
+      if (d.vram_total_gb > 0 && els.rsbVramBar) {
+        const vPct = Math.round(d.vram_used_gb / d.vram_total_gb * 100);
+        els.rsbVramBar.style.width = `${vPct}%`;
+        els.rsbVramBar.classList.toggle('rsb-amber', vPct > 80);
+        els.rsbVramBar.classList.toggle('rsb-indigo', vPct <= 80);
+      }
+    } catch (_) {}
+  }
+
+  function updateContextBar() {
+    const nCtx = state.nCtx || 8192;
+    const history = state.conversationHistory || [];
+    const totalChars = history.reduce((s, m) => s + (m.content?.length || 0), 0);
+    const tokenEst = Math.ceil(totalChars / 4);
+    const pct = Math.min(100, Math.round(tokenEst / nCtx * 100));
+
+    if (els.rsbCtxAscii) els.rsbCtxAscii.textContent = _ascii(pct);
+    if (els.rsbCtxTokens) {
+      const used = tokenEst.toLocaleString();
+      const max = nCtx.toLocaleString();
+      els.rsbCtxTokens.textContent = `${used} / ${max} tokens`;
+    }
+    if (els.rsbCtxPct) els.rsbCtxPct.textContent = `${pct}%`;
+  }
+
+  function start() {
+    _refreshStats();
+    _statsTimer = setInterval(_refreshStats, 3000);
+  }
+
+  function stop() {
+    if (_statsTimer) { clearInterval(_statsTimer); _statsTimer = null; }
+  }
+
+  return { start, stop, updateContextBar };
+})();
+
 const ragUI = {
     currentFiles: [],
     ready: false,
@@ -4353,6 +4409,7 @@ const api = {
             if (isTutorialChat) {
                 // Tutorial chat mode - use /tutorial/chat with in-memory history
                 state.tutorialHistory.push({ role: 'user', content: promptText });
+                rsbStats.updateContextBar();
 
                 // Determine if context is allowed based on tutorial stage
                 const allow_context = (FRT.track === "context");
@@ -4558,6 +4615,7 @@ const api = {
             // Add assistant response to tutorial history if in tutorial mode
             if (isTutorialChat) {
                 state.tutorialHistory.push({ role: 'assistant', content: assistantMsgContent });
+                rsbStats.updateContextBar();
 
                 // Check if this satisfies a required action
                 if (FRT.requiredAction.kind && !FRT.requiredAction.satisfied) {
@@ -5852,6 +5910,7 @@ const startApp = async () => {
     toolsUI.init();
     modePills.init();  // Wire mode pill toggles after toolsUI is ready
     rsbLights.start();
+    rsbStats.start();
 
     // Initialize Voice UI (async, non-blocking — shows mic if /voice/status available)
     voiceUI.init().catch(e => Logger.debug('Voice', `init error: ${e}`));
