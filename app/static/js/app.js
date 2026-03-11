@@ -3420,19 +3420,45 @@ function updateSessionDisplay() {
     }
 }
 
+function buildMessageHTML(role, text) {
+    const isUser = role === 'user';
+    const initial = isUser ? ((window.userPreferredName)?.[0]?.toUpperCase() || 'U') : 'J';
+    const displayName = isUser ? (window.userPreferredName || 'You') : 'Jarvis';
+    return `
+        <div class="msg-row ${isUser ? 'user' : 'ai'}">
+          <div class="msg-avatar ${isUser ? 'user' : 'ai'}">${initial}</div>
+          <div class="msg-body">
+            <div class="msg-name">${displayName}</div>
+            <div class="msg-text">${text}</div>
+          </div>
+        </div>`;
+}
+
+function buildActionCardHTML(type, title, subtitle) {
+    const cardClass = type === 'home' ? 'home' : 'memory';
+    const iconId   = type === 'home' ? 'ico-home' : 'ico-memory';
+    return `
+        <div class="action-card ${cardClass}">
+          <svg width="16" height="16" style="flex-shrink:0"><use href="#${iconId}"/></svg>
+          <div>
+            <div class="action-card-title">${title}</div>
+            <div class="action-card-sub">${subtitle}</div>
+          </div>
+        </div>`;
+}
+
 const appendMessage = (role, text) => {
-    const msgDiv = document.createElement('div');
-    msgDiv.className = `message ${role === 'user' ? 'user-msg' : 'ai-msg'}`;
-    const content = document.createElement('div');
-    content.className = 'msg-content markdown-body';
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = buildMessageHTML(role, text);
+    const rowEl = wrapper.firstElementChild;
     if (role === 'assistant') {
-        content.innerHTML = marked.parse(text);
-        content.querySelectorAll('pre code').forEach((block) => hljs.highlightElement(block));
-    } else {
-        content.innerText = text;
+        const msgText = rowEl.querySelector('.msg-text');
+        if (msgText) {
+            msgText.innerHTML = marked.parse(text);
+            msgText.querySelectorAll('pre code').forEach((block) => hljs.highlightElement(block));
+        }
     }
-    msgDiv.appendChild(content);
-    els.chatHistory.appendChild(msgDiv);
+    els.chatHistory.appendChild(rowEl);
     els.chatHistory.scrollTop = els.chatHistory.scrollHeight;
     rsbStats.addChars(text.length);
 };
@@ -4505,13 +4531,11 @@ const api = {
             let rafScheduled = false;
             const updatePlainText = () => {
                 if(!msgDiv) {
-                    assistantMsgEl = document.createElement('div');
-                    assistantMsgEl.className = 'message ai-msg';
-                    const c = document.createElement('div');
-                    c.className = 'msg-content markdown-body';
-                    assistantMsgEl.appendChild(c);
+                    const wrapper = document.createElement('div');
+                    wrapper.innerHTML = buildMessageHTML('assistant', '');
+                    assistantMsgEl = wrapper.firstElementChild;
                     els.chatHistory.appendChild(assistantMsgEl);
-                    msgDiv = c;
+                    msgDiv = assistantMsgEl.querySelector('.msg-text');
                 }
                 // Update as plain text (no markdown parsing during stream)
                 msgDiv.textContent = assistantMsgContent;
@@ -4549,6 +4573,13 @@ const api = {
                         const keyMatch = content.match(/Tier [AB]\): (\w+)/);
                         const key = keyMatch ? keyMatch[1] : 'information';
                         showToast(`Saved to memory: ${key}`, 'success');
+                        // Insert memory action card into chat
+                        const chatHistory = document.getElementById('chat-history');
+                        if (chatHistory) {
+                            chatHistory.insertAdjacentHTML('beforeend',
+                                buildActionCardHTML('memory', 'Memory saved', `Saved: ${key}`)
+                            );
+                        }
                     }
                 }
                 // Capture stats event
@@ -4585,7 +4616,9 @@ const api = {
                 // Add remaining content (markdown-rendered)
                 html += marked.parse(parsed.textWithoutThinking);
 
-                assistantMsgEl.innerHTML = html;
+                // Target .msg-text so avatar/name in the row are preserved
+                const thinkingTarget = msgDiv || assistantMsgEl?.querySelector('.msg-text') || assistantMsgEl;
+                if (thinkingTarget) thinkingTarget.innerHTML = html;
 
                 // Apply syntax highlighting to code blocks
                 assistantMsgEl.querySelectorAll('pre code').forEach((block) => hljs.highlightElement(block));
@@ -4631,14 +4664,23 @@ const api = {
                     <span>·</span>
                     <span>${timeSec}</span>
                 `;
-                // msgDiv is .msg-content, go up to .message parent
-                const messageParent = msgDiv.parentElement;
+                // msgDiv is .msg-text; go up to .msg-body to append stats below prose
+                const messageParent = msgDiv?.parentElement || assistantMsgEl?.querySelector('.msg-body');
                 if (messageParent) messageParent.appendChild(statsDiv);
             }
             // If lastStreamStats is null (error/unavailable), just don't render anything — clean degradation
 
             // Voice status: signal done for Home Control commands
-            if (isAssistMode) voiceStatusBar.setDone();
+            if (isAssistMode) {
+                voiceStatusBar.setDone();
+                // Insert home action card to surface the HA result in chat
+                const chatHistory = document.getElementById('chat-history');
+                if (chatHistory) {
+                    chatHistory.insertAdjacentHTML('beforeend',
+                        buildActionCardHTML('home', 'Light controlled', 'Home Assistant action')
+                    );
+                }
+            }
 
             state.isGenerating = false;
 
