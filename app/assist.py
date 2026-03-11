@@ -753,3 +753,27 @@ async def assist_status():
         "light_entity": _light_entity,
         "assist_phase": ASSIST_PHASE,
     }
+
+
+@router.get("/light_state")
+async def light_state_endpoint(request: Request):
+    """Return current state of the configured light entity for the sidebar."""
+    if not _ha_url or not _light_entity:
+        raise HTTPException(status_code=503, detail={"error": "HA not configured"})
+    try:
+        data = await ha_get_state(_light_entity)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail={"error": str(exc)})
+
+    attrs = data.get("attributes", {})
+    raw_brightness = attrs.get("brightness")          # 0–255 or None
+    brightness_pct = round(raw_brightness / 255 * 100) if raw_brightness is not None else 0
+
+    return {
+        "entity_id": _light_entity,
+        "state": data.get("state", "off"),            # "on" | "off"
+        "brightness_pct": brightness_pct,
+        "color_temp_k": attrs.get("color_temp_kelvin"),
+        "rgb": attrs.get("rgb_color"),
+        "last_changed": data.get("last_changed"),
+    }
