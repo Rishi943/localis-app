@@ -2514,7 +2514,9 @@ const rsbLights = (() => {
 
   async function _refresh() {
     try {
-      const data = await fetch('/assist/light_state').then(r => r.json());
+      const r = await fetch('/assist/light_state');
+      if (!r.ok) { _showUnavailable(); return; }
+      const data = await r.json();
       if (data.error) { _showUnavailable(); return; }
 
       const pct = data.brightness_pct ?? 0;
@@ -2549,7 +2551,7 @@ const rsbLights = (() => {
     if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
   }
 
-  return { start, stop };
+  return { start, stop, refresh: _refresh };
 })();
 
 if (els.rsbLightsToggle) {
@@ -2563,7 +2565,7 @@ if (els.rsbLightsToggle) {
           session_id: state.sessionId || 'sidebar',
         }),
       });
-      setTimeout(() => rsbLights._refresh?.(), 600);
+      setTimeout(() => rsbLights.refresh?.(), 600);
     } catch (_) {}
   });
 }
