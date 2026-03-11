@@ -4844,6 +4844,9 @@ const voiceUI = (() => {
     let _onDoneCallback = null;
     let _useWorklet = (typeof AudioWorkletNode !== 'undefined');
 
+    const _stateChangeCallbacks = [];
+    function onStateChange(cb) { _stateChangeCallbacks.push(cb); }
+
     const CANCEL_DELAY_MS = 1500;
 
     // HA mode persisted in localStorage
@@ -4861,6 +4864,7 @@ const voiceUI = (() => {
     }
 
     function _setState(s) {
+        _stateChangeCallbacks.forEach(cb => cb(s));
         _state = s;
         if (!els.voiceMicBtn) return;
         els.voiceMicBtn.classList.remove('listening', 'transcribing', 'speaking');
@@ -5230,7 +5234,7 @@ const voiceUI = (() => {
         });
     }
 
-    return { init, triggerPTT, _onStreamComplete, get haMode() { return _getHaMode(); }, get pendingChatText() { return _pendingChatText; }, get isIdle() { return _state === 'idle'; } };
+    return { init, triggerPTT, _onStreamComplete, onStateChange, get haMode() { return _getHaMode(); }, get pendingChatText() { return _pendingChatText; }, get isIdle() { return _state === 'idle'; } };
 })();
 
 // ============================================================
@@ -5251,6 +5255,9 @@ const wakewordUI = (() => {
     let _enabling = false;  // guard against concurrent enable() calls
     let _daemonPollInterval = null;
 
+    const _stateChangeCallbacks = [];
+    function onStateChange(cb) { _stateChangeCallbacks.push(cb); }
+
     function _isEnabled() { return localStorage.getItem(LS_KEY) === '1'; }
     function _setEnabled(v) { localStorage.setItem(LS_KEY, v ? '1' : '0'); }
 
@@ -5260,6 +5267,7 @@ const wakewordUI = (() => {
     }
 
     function _setStateLabel(state) {
+        _stateChangeCallbacks.forEach(cb => cb(state));
         const label = document.getElementById('wakeword-state-label');
         if (!label) return;
         const MAP = {
@@ -5479,7 +5487,7 @@ const wakewordUI = (() => {
         });
     }
 
-    return { init, enable, disable, get enabled() { return _isEnabled(); } };
+    return { init, enable, disable, onStateChange, get enabled() { return _isEnabled(); } };
 })();
 
 const startApp = async () => {
