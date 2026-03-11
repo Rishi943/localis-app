@@ -45,3 +45,6 @@ voices/
 
 # Backup files
 *.backup
+
+# Git worktrees
+.worktrees/
