@@ -1522,7 +1522,6 @@ const els = {
     btnResetPrompt: document.getElementById('btn-reset-prompt'),
     promptStatus: document.getElementById('prompt-status'),
     modelDisplay: document.getElementById('model-display'),
-    themeSelect: document.getElementById('theme-select'),
     tuiPrefix: document.getElementById('tui-prefix'),
     btnNewChat: document.getElementById('btn-new-chat'),
     statusDot: document.getElementById('status-dot'),
@@ -1550,6 +1549,9 @@ const els = {
     voiceCancelBtn: document.getElementById('voice-cancel-btn'),
     voiceCancelCountdown: document.getElementById('voice-cancel-countdown'),
     wakewordToggleBtn: document.getElementById('wakeword-toggle-btn'),
+    voiceStatusBar: document.getElementById('voice-status-bar'),
+    voiceStatusLabel: document.querySelector('#voice-status-bar .voice-status-label'),
+    voiceStatusTag: document.querySelector('#voice-status-bar .voice-status-tag'),
     inputs: {
         layers: document.getElementById('num-layers'),
         ctx: document.getElementById('num-ctx'),
@@ -1561,6 +1563,63 @@ const els = {
         temp: document.getElementById('slider-temp')
     }
 };
+
+// ============================================================
+// voiceStatusBar — slim glass pill showing voice pipeline state
+// ============================================================
+const voiceStatusBar = (() => {
+    let _doneTimer = null;
+
+    const STATE_MAP = {
+        // wakewordUI states
+        idle:         { label: 'Say "Hey Jarvis"', tag: 'wakeword',  color: null    },
+        recording:    { label: 'Hey Jarvis — listening…', tag: 'triggered', color: 'amber' },
+        transcribing: { label: 'Transcribing…',    tag: 'stt',       color: 'amber' },
+        submitting:   { label: 'Processing…',      tag: 'thinking',  color: 'amber' },
+        cooldown:     { label: 'Say "Hey Jarvis"', tag: 'wakeword',  color: null    },
+        disabled:     { label: 'Say "Hey Jarvis"', tag: 'wakeword',  color: null    },
+        // voiceUI states
+        listening:    { label: 'Listening…',       tag: 'recording', color: 'amber' },
+        confirming:   { label: 'Processing…',      tag: 'thinking',  color: 'amber' },
+        waiting:      { label: 'Processing…',      tag: 'thinking',  color: 'amber' },
+        speaking:     { label: 'Processing…',      tag: 'thinking',  color: 'amber' },
+        // done (synthetic)
+        done:         { label: 'Done',             tag: 'success',   color: 'green' },
+    };
+
+    function _apply(key) {
+        const bar   = els.voiceStatusBar;
+        const label = els.voiceStatusLabel;
+        const tag   = els.voiceStatusTag;
+        if (!bar) return;
+        const s = STATE_MAP[key] || STATE_MAP.idle;
+        bar.classList.remove('amber', 'green');
+        if (s.color) bar.classList.add(s.color);
+        if (label) label.textContent = s.label;
+        if (tag)   tag.textContent   = s.tag;
+    }
+
+    function show() { els.voiceStatusBar?.classList.remove('hidden'); }
+    function hide() { els.voiceStatusBar?.classList.add('hidden');    }
+
+    function setState(state) {
+        clearTimeout(_doneTimer);
+        _apply(state);
+    }
+
+    function setDone() {
+        clearTimeout(_doneTimer);
+        _apply('done');
+        _doneTimer = setTimeout(() => setState('idle'), 2000);
+    }
+
+    function init() {
+        wakewordUI.onStateChange(state => setState(state));
+        voiceUI.onStateChange(state => setState(state));
+    }
+
+    return { show, hide, setState, setDone, init };
+})();
 
 FRT.els.text = document.getElementById('frt-text');
 FRT.els.optional = document.getElementById('frt-optional');
@@ -2975,7 +3034,6 @@ const openRightSidebarSection = (sectionKey) => {
     if(sectionKey === 'model') targetId = 'grp-model';
     else if(sectionKey === 'temp') targetId = 'grp-temp';
     else if(sectionKey === 'memory') targetId = 'memory-matrix-container';
-    else if(sectionKey === 'appearance') targetId = 'grp-theme';
 
     if(targetId) {
         const el = document.getElementById(targetId);
@@ -3003,8 +3061,6 @@ if (btnRailModel) {
 }
 if(document.getElementById('btn-rail-temp')) document.getElementById('btn-rail-temp').onclick = () => openRightSidebarSection('temp');
 if(document.getElementById('btn-rail-memory')) document.getElementById('btn-rail-memory').onclick = () => openRightSidebarSection('memory');
-if(document.getElementById('btn-rail-appearance')) document.getElementById('btn-rail-appearance').onclick = () => openRightSidebarSection('appearance');
-
 if(els.btnOpenSettings) els.btnOpenSettings.onclick = () => toggleSettings(!state.rightSidebarOpen);
 if(els.btnOpenSettingsSidebar) els.btnOpenSettingsSidebar.onclick = () => toggleSettings(true);
 if(els.btnOpenSettingsRail) els.btnOpenSettingsRail.onclick = () => toggleSettings(true);
@@ -3063,21 +3119,7 @@ const updateAccent = (color) => {
 };
 if(elAccent) elAccent.addEventListener('input', (e) => updateAccent(e.target.value));
 
-const updateTheme = () => {
-    if(!els.themeSelect) return;
-    const theme = els.themeSelect.value;
-    Array.from(els.themeSelect.options).forEach(opt => document.body.classList.remove(opt.value));
-    document.body.classList.add(theme);
-    AppSettings.set('theme', theme);
-    if(theme === 'theme-tui') {
-        els.prompt.placeholder = ""; els.sendBtn.textContent = "EXEC";
-    } else {
-        els.prompt.placeholder = "Type a message..."; els.sendBtn.textContent = "SEND";
-    }
-};
-if(els.themeSelect) els.themeSelect.addEventListener('change', updateTheme);
-const savedTheme = localStorage.getItem('local_ai_theme');
-if(savedTheme && els.themeSelect) { els.themeSelect.value = savedTheme; updateTheme(); }
+// Theme selector removed — theme is now fixed (midnight-glass via CSS variables)
 
 const updateStatus = (online, msg) => {
     els.connStatus.textContent = msg;
@@ -4103,6 +4145,7 @@ const api = {
         // Detect tutorial chat mode
         const isTutorialChat = document.body.classList.contains('first-run-tutorial') &&
                                document.body.classList.contains('frt-split-with-chat');
+        const isAssistMode = !isTutorialChat && (voiceOpts?.assistMode || toolsUI.selectedTools.has('assist_mode'));
 
         try {
             let res;
@@ -4130,7 +4173,6 @@ const api = {
                 });
             } else {
                 // Normal chat mode - use /chat with session
-                const isAssistMode = (voiceOpts?.assistMode || toolsUI.selectedTools.has('assist_mode'));
                 const selectedTools = toolsUI.getSelectedTools().filter(t => t.type !== 'assist_mode');
                 res = await fetch('/chat', {
                     method: 'POST',
@@ -4301,6 +4343,9 @@ const api = {
                 if (messageParent) messageParent.appendChild(statsDiv);
             }
             // If lastStreamStats is null (error/unavailable), just don't render anything — clean degradation
+
+            // Voice status: signal done for Home Control commands
+            if (isAssistMode) voiceStatusBar.setDone();
 
             state.isGenerating = false;
 
@@ -4844,6 +4889,9 @@ const voiceUI = (() => {
     let _onDoneCallback = null;
     let _useWorklet = (typeof AudioWorkletNode !== 'undefined');
 
+    const _stateChangeCallbacks = [];
+    function onStateChange(cb) { _stateChangeCallbacks.push(cb); }
+
     const CANCEL_DELAY_MS = 1500;
 
     // HA mode persisted in localStorage
@@ -4861,6 +4909,7 @@ const voiceUI = (() => {
     }
 
     function _setState(s) {
+        _stateChangeCallbacks.forEach(cb => cb(s));
         _state = s;
         if (!els.voiceMicBtn) return;
         els.voiceMicBtn.classList.remove('listening', 'transcribing', 'speaking');
@@ -5230,7 +5279,7 @@ const voiceUI = (() => {
         });
     }
 
-    return { init, triggerPTT, _onStreamComplete, get haMode() { return _getHaMode(); }, get pendingChatText() { return _pendingChatText; }, get isIdle() { return _state === 'idle'; } };
+    return { init, triggerPTT, _onStreamComplete, onStateChange, get haMode() { return _getHaMode(); }, get pendingChatText() { return _pendingChatText; }, get isIdle() { return _state === 'idle'; } };
 })();
 
 // ============================================================
@@ -5251,15 +5300,20 @@ const wakewordUI = (() => {
     let _enabling = false;  // guard against concurrent enable() calls
     let _daemonPollInterval = null;
 
+    const _stateChangeCallbacks = [];
+    function onStateChange(cb) { _stateChangeCallbacks.push(cb); }
+
     function _isEnabled() { return localStorage.getItem(LS_KEY) === '1'; }
     function _setEnabled(v) { localStorage.setItem(LS_KEY, v ? '1' : '0'); }
 
     function _updateToggleUI(active) {
         els.wakewordToggleBtn?.classList.toggle('active', active);
         els.wakewordToggleBtn?.setAttribute('title', active ? 'Wake word: ON' : 'Wake word: OFF');
+        if (active) voiceStatusBar.show(); else voiceStatusBar.hide();
     }
 
     function _setStateLabel(state) {
+        _stateChangeCallbacks.forEach(cb => cb(state));
         const label = document.getElementById('wakeword-state-label');
         if (!label) return;
         const MAP = {
@@ -5479,7 +5533,7 @@ const wakewordUI = (() => {
         });
     }
 
-    return { init, enable, disable, get enabled() { return _isEnabled(); } };
+    return { init, enable, disable, onStateChange, get enabled() { return _isEnabled(); } };
 })();
 
 const startApp = async () => {
@@ -5534,6 +5588,7 @@ const startApp = async () => {
 
     // Initialize Wakeword UI (depends on voice availability, runs after voiceUI)
     wakewordUI.init().catch(e => Logger.debug('Wakeword', `init error: ${e}`));
+    voiceStatusBar.init();
 
     // Load system prompt
     api.loadSystemPrompt();
