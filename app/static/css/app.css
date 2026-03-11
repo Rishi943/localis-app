@@ -89,7 +89,7 @@ textarea { font-family: var(--font-ui); }
 }
 .lsb.collapsed .lsb-title { display: none; }
 .new-chat-btn {
-  margin: 8px 8px 4px;
+  margin: 0 8px 8px;
   padding: 7px 10px;
   border-radius: 8px;
   background: rgba(255,255,255,.07);
@@ -104,7 +104,7 @@ textarea { font-family: var(--font-ui); }
 .lsb.collapsed .new-chat-btn span { display: none; }
 .sess-list {
   flex: 1; overflow-y: auto; overflow-x: hidden;
-  padding: 4px 6px;
+  padding: 0 6px;
   display: flex; flex-direction: column; gap: 2px;
 }
 .lsb.collapsed .sess-list { display: none; }
@@ -148,6 +148,7 @@ textarea { font-family: var(--font-ui); }
   box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
   display: flex; align-items: center; justify-content: center;
   color: rgba(255,255,255,.35);
+  cursor: pointer;
   flex-shrink: 0;
 }
 
@@ -182,6 +183,7 @@ textarea { font-family: var(--font-ui); }
   box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
   display: flex; align-items: center; justify-content: center;
   color: rgba(255,255,255,.35);
+  cursor: pointer;
 }
 .chat-zone {
   flex: 1; overflow-y: auto; overflow-x: hidden;
