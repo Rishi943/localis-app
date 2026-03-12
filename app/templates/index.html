@@ -419,17 +419,35 @@
         </div>
       </div>
       <div class="rsb-l-ctrls">
+        <!-- Power -->
         <button class="rsb-lbtn" id="rsb-btn-power" title="Power">
-          <svg width="14" height="14"><use href="#ico-settings"/></svg>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M7 2v4"/>
+            <path d="M10.5 3.5a5 5 0 1 1-7 0"/>
+          </svg>
         </button>
+        <!-- Brightness -->
         <button class="rsb-lbtn active" id="rsb-btn-brightness" title="Brightness">
-          <svg width="14" height="14"><use href="#ico-temp"/></svg>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+            <circle cx="7" cy="7" r="2.5"/>
+            <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.93 2.93l1.06 1.06M9.01 9.01l1.06 1.06M11.07 2.93l-1.06 1.06M4.99 9.01l-1.06 1.06"/>
+          </svg>
         </button>
+        <!-- Color -->
         <button class="rsb-lbtn" id="rsb-btn-color" title="Colour">
-          <svg width="14" height="14"><use href="#ico-memory"/></svg>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" stroke="none">
+            <circle cx="4.5" cy="5" r="2" opacity=".9"/>
+            <circle cx="9.5" cy="5" r="2" opacity=".7"/>
+            <circle cx="7" cy="9" r="2" opacity=".8"/>
+          </svg>
         </button>
+        <!-- Kelvin -->
         <button class="rsb-lbtn" id="rsb-btn-kelvin" title="Colour temp">
-          <svg width="14" height="14"><use href="#ico-temp"/></svg>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+            <path d="M7 2v6"/>
+            <circle cx="7" cy="10" r="2"/>
+            <path d="M9 3h2M9 5h1.5"/>
+          </svg>
         </button>
       </div>
       <div id="rsb-swatches" class="rsb-swatches">
@@ -463,22 +481,21 @@
       <div class="rsb-sec-lbl">
         <svg width="10" height="10"><use href="#ico-model"/></svg> Model
       </div>
-      <div class="rsb-model-drop">
-        <div>
+      <button id="rsb-model-trigger" class="rsb-model-trigger">
+        <div class="rsb-model-trigger-info">
           <div id="rsb-model-name" class="rsb-model-name">No model loaded</div>
           <div id="rsb-model-status" class="rsb-model-st offline">● OFFLINE</div>
         </div>
-      </div>
-      <div id="rsb-model-list" class="rsb-model-list">
-        <!-- Populated by rsbModel.init() from state.availableModels -->
+        <svg class="rsb-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M2 4l3 3 3-3"/>
+        </svg>
+      </button>
+      <div id="rsb-model-list" class="rsb-model-list hidden">
+        <!-- Populated by rsbModel.renderList() -->
       </div>
       <div class="rsb-model-actions">
-        <button id="rsb-btn-load-model" class="rsb-action-btn rsb-action-primary" disabled>
-          Load
-        </button>
-        <button id="rsb-btn-unload-model" class="rsb-action-btn rsb-action-danger" disabled>
-          Unload
-        </button>
+        <button id="rsb-btn-load-model" class="rsb-action-btn rsb-action-primary" disabled>Load</button>
+        <button id="rsb-btn-unload-model" class="rsb-action-btn rsb-action-danger" disabled>Unload</button>
       </div>
     </div>
 
@@ -497,7 +514,7 @@
     </div>
 
     <!-- Section 4: SYSTEM STATS -->
-    <div class="rsb-sec" id="rsb-sec-stats">
+    <div class="rsb-sec rsb-sec-last" id="rsb-sec-stats">
       <div class="rsb-sec-lbl">System</div>
       <div class="rsb-stats">
         <div class="rsb-scard">
@@ -518,17 +535,6 @@
       </div>
     </div>
 
-    <!-- Section 5: CONTEXT WINDOW -->
-    <div class="rsb-sec rsb-sec-last" id="rsb-sec-ctx">
-      <div class="rsb-sec-lbl">Context Window</div>
-      <div class="rsb-ctx">
-        <div id="rsb-ctx-ascii" class="rsb-ctx-ascii">░░░░░░░░░░░░░░░░░░░░</div>
-        <div class="rsb-ctx-meta">
-          <span id="rsb-ctx-tokens">0 / — tokens</span>
-          <span id="rsb-ctx-pct" class="rsb-ctx-pct">0%</span>
-        </div>
-      </div>
-    </div>
 
     </div><!-- /rsb-body -->
 
@@ -548,9 +554,6 @@
       </button>
       <button class="rsb-rail-icon" data-section="rsb-sec-stats" title="System">
         <svg width="16" height="16"><use href="#ico-temp"/></svg>
-      </button>
-      <button class="rsb-rail-icon" data-section="rsb-sec-ctx" title="Context Window">
-        <svg width="16" height="16"><use href="#ico-memory"/></svg>
       </button>
     </div>
 

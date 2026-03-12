@@ -1589,6 +1589,7 @@ const els = {
     rsbKelvinCtrl:       document.getElementById('rsb-kelvin-ctrl'),
     rsbKelvinSlider:     document.getElementById('rsb-kelvin-slider'),
     rsbModelList:        document.getElementById('rsb-model-list'),
+    rsbModelTrigger:     document.getElementById('rsb-model-trigger'),
     rsbBtnLoadModel:     document.getElementById('rsb-btn-load-model'),
     rsbBtnUnloadModel:   document.getElementById('rsb-btn-unload-model'),
     modalProfileTags:      document.getElementById('modal-profile-tags'),
@@ -2650,6 +2651,57 @@ const rsbLights = (() => {
     });
 
     _setActiveControl('brightness'); // default active mode
+
+    // ── Bulb direct drag for brightness ──────────────────────────────────────
+    let _bulbDragging = false;
+    let _bulbLastPct = 50;
+
+    function _bulbPctFromEvent(clientY) {
+      if (!els.rsbBulb) return 50;
+      const rect = els.rsbBulb.getBoundingClientRect();
+      return Math.max(0, Math.min(100, Math.round((1 - (clientY - rect.top) / rect.height) * 100)));
+    }
+
+    function _bulbUpdateUI(pct) {
+      if (els.rsbBulbFill)  els.rsbBulbFill.style.height  = `${pct}%`;
+      if (els.rsbBulbLine)  els.rsbBulbLine.style.bottom   = `calc(${pct}% + 5px)`;
+      if (els.rsbLightsPct) els.rsbLightsPct.textContent   = `${pct}%`;
+      if (els.rsbBrightnessSlider) els.rsbBrightnessSlider.value = pct;
+      _bulbLastPct = pct;
+    }
+
+    els.rsbBulb?.addEventListener('mousedown', e => {
+      _bulbDragging = true;
+      _bulbUpdateUI(_bulbPctFromEvent(e.clientY));
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!_bulbDragging) return;
+      _bulbUpdateUI(_bulbPctFromEvent(e.clientY));
+    });
+    document.addEventListener('mouseup', () => {
+      if (!_bulbDragging) return;
+      _bulbDragging = false;
+      _haPost('/assist/light/brightness', { value: _bulbLastPct }).catch(() => {});
+      setTimeout(_refresh, 600);
+    });
+
+    // Touch support
+    els.rsbBulb?.addEventListener('touchstart', e => {
+      _bulbDragging = true;
+      _bulbUpdateUI(_bulbPctFromEvent(e.touches[0].clientY));
+      e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('touchmove', e => {
+      if (!_bulbDragging) return;
+      _bulbUpdateUI(_bulbPctFromEvent(e.touches[0].clientY));
+    }, { passive: false });
+    document.addEventListener('touchend', () => {
+      if (!_bulbDragging) return;
+      _bulbDragging = false;
+      _haPost('/assist/light/brightness', { value: _bulbLastPct }).catch(() => {});
+      setTimeout(_refresh, 600);
+    });
   }
 
   function start() {
@@ -2691,6 +2743,9 @@ const rsbModel = (() => {
         _selectedModel = m.name;
         renderList();
         if (els.rsbBtnLoadModel) els.rsbBtnLoadModel.disabled = false;
+        // Close dropdown after selection
+        els.rsbModelTrigger?.classList.remove('open');
+        if (els.rsbModelList) els.rsbModelList.classList.add('hidden');
       });
       els.rsbModelList.appendChild(item);
     });
@@ -2754,6 +2809,21 @@ const rsbModel = (() => {
       } catch (_) {}
       els.rsbBtnUnloadModel.textContent = 'Unload';
     });
+
+    // Dropdown toggle
+    els.rsbModelTrigger?.addEventListener('click', () => {
+      const isOpen = els.rsbModelTrigger.classList.toggle('open');
+      if (els.rsbModelList) els.rsbModelList.classList.toggle('hidden', !isOpen);
+      if (isOpen) renderList(); // refresh on open
+    });
+
+    // Close when clicking outside
+    document.addEventListener('click', e => {
+      if (!els.rsbModelTrigger?.contains(e.target) && !els.rsbModelList?.contains(e.target)) {
+        els.rsbModelTrigger?.classList.remove('open');
+        if (els.rsbModelList) els.rsbModelList.classList.add('hidden');
+      }
+    }, true);
   }
 
   return { init, renderList, updateStatus };
