@@ -2,11 +2,23 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* Global scrollbar recipe */
+/* Global scrollbar recipe — ghost: invisible at rest, appears on container hover */
 ::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,.04); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.08); }
+::-webkit-scrollbar-thumb { background: transparent; border-radius: 2px; transition: background .2s; }
+
+.sess-list:hover ::-webkit-scrollbar-thumb,
+.rsb-body:hover ::-webkit-scrollbar-thumb,
+.chat-zone:hover ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); }
+
+/* Firefox ghost scrollbar */
+.sess-list, .rsb-body, .chat-zone {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+}
+.sess-list:hover, .rsb-body:hover, .chat-zone:hover {
+    scrollbar-color: rgba(255,255,255,.08) transparent;
+}
 
 :root {
   /* Fonts */
@@ -241,9 +253,9 @@ body.app-ready .app-container { display: flex; }
 
 /* ============================================================
    VOICE STATUS BAR
-   (Preserved verbatim — wakeword JS pipeline sets these classes directly)
+   Uses #voice-status-bar ID selectors only — JS targets element by ID.
 ============================================================ */
-.voice-status-bar {
+#voice-status-bar {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -258,16 +270,16 @@ body.app-ready .app-container { display: flex; }
     transition: opacity 0.2s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.voice-status-bar.hidden {
+#voice-status-bar.hidden {
     display: none;
 }
 
-.voice-status-bar.amber {
+#voice-status-bar.amber {
     border-color: rgba(245,158,11,.35);
     box-shadow: 0 0 16px rgba(245,158,11,.12);
 }
 
-.voice-status-bar.green {
+#voice-status-bar.green {
     border-color: rgba(16,185,129,.35);
     box-shadow: 0 0 16px rgba(16,185,129,.12);
 }
@@ -281,14 +293,14 @@ body.app-ready .app-container { display: flex; }
     transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.voice-status-bar.amber .voice-status-dot {
-    background: #f59e0b;
-    box-shadow: 0 0 8px #f59e0b;
+#voice-status-bar.amber .voice-status-dot {
+    background: var(--status-amber);
+    box-shadow: 0 0 8px var(--status-amber);
 }
 
-.voice-status-bar.green .voice-status-dot {
-    background: #10b981;
-    box-shadow: 0 0 8px #10b981;
+#voice-status-bar.green .voice-status-dot {
+    background: var(--status-green);
+    box-shadow: 0 0 8px var(--status-green);
 }
 
 .voice-status-label {
@@ -299,8 +311,8 @@ body.app-ready .app-container { display: flex; }
     transition: color 0.15s ease;
 }
 
-.voice-status-bar.amber .voice-status-label { color: #fcd34d; }
-.voice-status-bar.green  .voice-status-label { color: #6ee7b7; }
+#voice-status-bar.amber .voice-status-label { color: #fcd34d; }
+#voice-status-bar.green  .voice-status-label { color: #6ee7b7; }
 
 .voice-status-tag {
     font-size: 10px;
@@ -311,8 +323,8 @@ body.app-ready .app-container { display: flex; }
     transition: color 0.15s ease;
 }
 
-.voice-status-bar.amber .voice-status-tag { color: #92400e; }
-.voice-status-bar.green  .voice-status-tag { color: #064e3b; }
+#voice-status-bar.amber .voice-status-tag { color: rgba(245,158,11,.6); }
+#voice-status-bar.green  .voice-status-tag { color: rgba(16,185,129,.6); }
 
 /* ── Wakeword toggle button ──────── */
 .wakeword-toggle-btn {
@@ -453,16 +465,6 @@ body.app-ready .app-container { display: flex; }
 .action-card-title { font-weight: 600; }
 .action-card-sub   { font-size: 9px; opacity: .5; margin-top: 1px; }
 
-/* ── Voice status bar — ID selector variants (JS may target #voice-status-bar) ─── */
-/* NOTE: Structural rules and .voice-status-bar.amber/.green already defined above.
-   These selectors cover the #id form used by JS references. */
-#voice-status-bar.amber .voice-status-dot { background: var(--status-amber); box-shadow: 0 0 6px rgba(245,158,11,.5); }
-#voice-status-bar.amber .voice-status-label { color: #fcd34d; }
-#voice-status-bar.amber .voice-status-tag { color: rgba(245,158,11,.6); }
-#voice-status-bar.green .voice-status-dot { background: var(--status-green); box-shadow: 0 0 6px rgba(16,185,129,.5); }
-#voice-status-bar.green .voice-status-label { color: #6ee7b7; }
-#voice-status-bar.green .voice-status-tag { color: rgba(16,185,129,.6); }
-
 /* ── Mode pills ──────────────────── */
 .mode-pills { display: flex; gap: 4px; }
 .mode-pill {
@@ -575,6 +577,19 @@ body.app-ready .app-container { display: flex; }
   text-transform: uppercase; letter-spacing: .1em;
   color: rgba(255,255,255,.25);
   display: flex; align-items: center; gap: 5px;
+}
+.rsb-section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 12px 16px 6px;
+}
+.rsb-divider {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    margin: 0;
 }
 
 /* Lights */
