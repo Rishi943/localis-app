@@ -254,77 +254,31 @@ body.app-ready .app-container { display: flex; }
 /* ============================================================
    VOICE STATUS BAR
    Uses #voice-status-bar ID selectors only — JS targets element by ID.
+   No .voice-status-bar class selectors anywhere in this block.
 ============================================================ */
 #voice-status-bar {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 7px 14px;
-    margin-bottom: 6px;
-    background: rgba(15,15,15,.45);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
-    border: 1px solid rgba(255,255,255,.08);
-    border-radius: 100px;
-    opacity: 1;
-    transition: opacity 0.2s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    gap: 6px;
+    padding: 3px 0 5px;
+    opacity: 0.35;
+    transition: opacity 0.2s;
+    background: transparent;
+    border: none;
+    backdrop-filter: none;
+    box-shadow: none;
 }
-
 #voice-status-bar.hidden {
     display: none;
 }
-
-#voice-status-bar.amber {
-    border-color: rgba(245,158,11,.35);
-    box-shadow: 0 0 16px rgba(245,158,11,.12);
-}
-
-#voice-status-bar.green {
-    border-color: rgba(16,185,129,.35);
-    box-shadow: 0 0 16px rgba(16,185,129,.12);
-}
-
-.voice-status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    background: #3f3f46;
-    transition: background 0.15s ease, box-shadow 0.15s ease;
-}
-
-#voice-status-bar.amber .voice-status-dot {
-    background: var(--status-amber);
-    box-shadow: 0 0 8px var(--status-amber);
-}
-
-#voice-status-bar.green .voice-status-dot {
-    background: var(--status-green);
-    box-shadow: 0 0 8px var(--status-green);
-}
-
-.voice-status-label {
-    flex: 1;
-    font-size: 12px;
-    font-weight: 500;
-    color: #71717a;
-    transition: color 0.15s ease;
-}
-
-#voice-status-bar.amber .voice-status-label { color: #fcd34d; }
-#voice-status-bar.green  .voice-status-label { color: #6ee7b7; }
-
-.voice-status-tag {
-    font-size: 10px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #3f3f46;
-    transition: color 0.15s ease;
-}
-
-#voice-status-bar.amber .voice-status-tag { color: rgba(245,158,11,.6); }
-#voice-status-bar.green  .voice-status-tag { color: rgba(16,185,129,.6); }
+#voice-status-bar.amber, #voice-status-bar.green { opacity: 0.75; }
+#voice-status-bar .voice-status-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,.4); flex-shrink: 0; }
+#voice-status-bar.amber .voice-status-dot { background: var(--status-amber); }
+#voice-status-bar.green .voice-status-dot { background: var(--status-green); }
+#voice-status-bar .voice-status-label { font-size: 11px; color: var(--text-muted); }
+#voice-status-bar.amber .voice-status-label { color: var(--text-muted); }
+#voice-status-bar.green  .voice-status-label { color: var(--text-muted); }
+#voice-status-bar .voice-status-tag { display: none; }
 
 /* ── Wakeword toggle button ──────── */
 .wakeword-toggle-btn {
@@ -503,8 +457,8 @@ body.app-ready .app-container { display: flex; }
   flex-shrink: 0;
 }
 #prompt {
-  flex: 1; background: none; border: none; outline: none;
-  font-family: var(--font-ui); font-size: 13px;
+  flex: 1; background: transparent; border: none; outline: none;
+  font-family: var(--font-ui); font-size: 15px;
   color: var(--text-primary); resize: none; line-height: 1.4;
 }
 #prompt::placeholder { color: rgba(255,255,255,.2); }
@@ -863,3 +817,28 @@ body.app-ready .app-container { display: flex; }
 
 /* ── FRT overlay: hide once app is ready ── */
 body.app-ready #frt-overlay { display: none !important; }
+
+/* ── Token estimate hint ─────────────── */
+.token-estimate { font-size: 11px; color: var(--text-muted); opacity: 0.5; user-select: none; align-self: flex-end; margin-left: auto; flex-shrink: 0; }
+
+/* ── Message action chips ────────────── */
+.msg-actions { display: flex; gap: 6px; margin-top: 6px; padding-left: 4px; }
+.msg-action-chip { font-size: 12px; padding: 3px 10px; border-radius: var(--r-sm); background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-muted); cursor: pointer; transition: background .15s, color .15s; }
+.msg-action-chip:hover { background: var(--accent-soft); color: var(--accent-primary); }
+
+/* ── Thinking block (collapsible pill) ── */
+.thinking-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: var(--r-pill); background: var(--card-bg); border: 1px solid var(--card-border); font-size: 12px; color: var(--text-muted); cursor: pointer; margin-bottom: 8px; user-select: none; }
+.thinking-body { display: none; padding: 10px 14px; margin-bottom: 8px; border-left: 2px solid var(--border-subtle); font-size: 13px; color: var(--text-muted); font-family: var(--font-mono); white-space: pre-wrap; }
+.thinking-body.expanded { display: block; }
+
+/* ── Welcome state (empty session) ────── */
+.welcome-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; text-align: center; }
+.welcome-logo { font-size: 32px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; }
+.welcome-sub { font-size: 14px; color: var(--text-muted); }
+.welcome-suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
+.welcome-chip { font-size: 13px; padding: 8px 16px; border-radius: var(--r-pill); background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; transition: background .15s; }
+.welcome-chip:hover { background: var(--accent-soft); border-color: var(--accent-border); color: var(--text-primary); }
+
+/* ── Tool chips (inline, beside input) ── */
+.tool-chip { font-size: 12px; padding: 3px 10px; border-radius: var(--r-sm); background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; transition: background .15s; }
+.tool-chip.active { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent-primary); }

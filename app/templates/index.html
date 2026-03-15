@@ -115,23 +115,6 @@
 <!-- GLOBAL DIM OVERLAY -->
 <div id="dim-overlay"></div>
 
-<!-- Session Indicator (top-right corner) -->
-<div id="session-indicator" style="
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    padding: 5px 10px;
-    background: rgba(0, 0, 0, 0.7);
-    color: #888;
-    font-size: 0.75rem;
-    border-radius: 4px;
-    z-index: 1000;
-    user-select: none;
-    pointer-events: none;
-">
-    Session: <span id="session-id-display">default</span>
-</div>
-
 <!-- FIRST RUN TUTORIAL OVERLAY -->
 <div id="frt-overlay">
     <div id="frt-content">
@@ -298,6 +281,9 @@
       <!-- Populated by JS -->
     </div>
     <div class="lsb-foot">
+      <button id="btn-lsb-settings" class="lsb-foot-settings" aria-label="Settings">
+        <svg width="16" height="16"><use href="#ico-settings"/></svg>
+      </button>
       <div class="status-dot" id="status-dot"></div>
       <span id="model-status" class="status-txt">Offline</span>
     </div>
@@ -320,6 +306,17 @@
     <!-- CHAT ZONE -->
     <div id="chat-zone" class="chat-zone">
       <div id="chat-history" class="chat-inner">
+        <!-- Welcome state — shown on empty session, hidden on first message -->
+        <div class="welcome-container" id="welcome-state">
+          <div class="welcome-logo">Localis</div>
+          <div class="welcome-sub">Your private AI. On your machine.</div>
+          <div class="welcome-suggestions">
+            <button class="welcome-chip" data-prompt="What can you help me with?">What can you help me with?</button>
+            <button class="welcome-chip" data-prompt="Turn off the lights">Turn off the lights</button>
+            <button class="welcome-chip" data-prompt="Search the web for latest AI news">Search the web for latest AI news</button>
+            <button class="welcome-chip" data-prompt="Remember that I prefer dark mode">Remember that I prefer dark mode</button>
+          </div>
+        </div>
         <!-- Messages rendered by JS -->
       </div>
     </div>
@@ -364,7 +361,8 @@
             <svg width="14" height="14"><use href="#ico-voice"/></svg>
             <span id="wakeword-state-label" class="wakeword-state-label"></span>
           </button>
-          <textarea id="prompt" rows="1" placeholder="Message Jarvis…" autocomplete="off"></textarea>
+          <textarea id="prompt" rows="1" placeholder="Message Localis..." autocomplete="off"></textarea>
+          <span id="token-estimate" class="token-estimate"></span>
           <button id="send-btn" class="send-btn">SEND</button>
         </div>
 
