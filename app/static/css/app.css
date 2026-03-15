@@ -1134,4 +1134,21 @@ body.app-ready #frt-overlay { display: none !important; }
     flex-shrink: 0;
 }
 
+.fin-onboarding-budget-form {
+    background: rgba(90,140,255,0.06);
+    border: 1px solid rgba(90,140,255,0.2);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 8px 0;
+}
+.fin-budget-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fin-budget-form-row { display: flex; align-items: center; gap: 6px; }
+.fin-budget-form-label { font-size: 13px; color: rgba(255,255,255,0.7); min-width: 80px; }
+.fin-budget-form-dollar { color: rgba(255,255,255,0.4); font-size: 13px; }
+.fin-budget-form-input {
+    width: 80px; background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border-subtle); border-radius: 6px;
+    color: var(--text-primary); padding: 4px 8px; font-size: 13px;
+}
+
 /* === END FINANCE PANEL === */

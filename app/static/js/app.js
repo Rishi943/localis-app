@@ -1751,15 +1751,298 @@ const financeUI = (function() {
         }
     }
 
-    // --- Dashboard loading stub (implemented in Plan 05) ---
-    function _loadDashboard(period) {
-        // Stub: Plan 05 implements full dashboard rendering
-        // For now just show empty state if no data
+    // --- Dashboard loading (Plan 05) ---
+    async function _loadDashboard(period) {
+        try {
+            const encodedPeriod = encodeURIComponent(period || 'All time');
+            const res = await fetch(`/finance/dashboard_data?period=${encodedPeriod}`);
+            if (!res.ok) return;
+            const data = await res.json();
+
+            // Show/hide empty state
+            const emptyState = document.getElementById('fin-empty-state');
+            const hasData = data.transactions && data.transactions.length > 0;
+            if (emptyState) emptyState.classList.toggle('hidden', hasData);
+
+            if (!hasData) return;
+
+            renderCategories(data.categories);
+            renderBudgetActual(data.budget_actual, data.has_goals);
+            renderTrend(data.trend);
+            renderTransactions(data.transactions);
+        } catch(e) {
+            // Dashboard not yet available — show empty state
+        }
     }
 
-    // --- Onboarding stub (implemented in Plan 05) ---
+    function renderCategories(categories) {
+        const container = document.getElementById('fin-categories-chart');
+        if (!container) return;
+        if (!categories || categories.length === 0) { container.innerHTML = '<p class="fin-empty-hint">No spending data for this period.</p>'; return; }
+
+        const maxTotal = Math.max(...categories.map(c => c.total));
+        container.innerHTML = categories.map((cat, i) => {
+            const pct = maxTotal > 0 ? (cat.total / maxTotal * 100).toFixed(1) : 0;
+            const isDominant = i === 0; // sorted by total DESC — first is dominant
+            return `
+              <div class="fin-bar-row">
+                <span class="fin-bar-label">${cat.category}</span>
+                <div class="fin-bar-track">
+                  <div class="fin-bar-fill ${isDominant ? 'fin-dominant' : ''}" style="--pct:${pct}"></div>
+                </div>
+                <span class="fin-bar-amount">$${cat.total.toFixed(2)}</span>
+              </div>`;
+        }).join('');
+        // Trigger CSS transition: set --pct via JS after paint
+        requestAnimationFrame(() => {
+            container.querySelectorAll('.fin-bar-fill').forEach((el, i) => {
+                const cat = categories[i];
+                const pct = maxTotal > 0 ? (cat.total / maxTotal * 100).toFixed(1) : 0;
+                el.style.setProperty('--pct', pct);
+            });
+        });
+    }
+
+    function renderBudgetActual(budgetActual, hasGoals) {
+        const container = document.getElementById('fin-budget-chart');
+        const hint = document.getElementById('fin-set-budgets-hint');
+        if (!container) return;
+
+        if (!hasGoals || !budgetActual || budgetActual.length === 0) {
+            // Show actual-only bars + ghost hint
+            if (hint) hint.classList.remove('hidden');
+            // Still render actual bars without budget bars
+            if (budgetActual && budgetActual.length > 0) {
+                const maxActual = Math.max(...budgetActual.map(b => b.actual));
+                container.innerHTML = budgetActual.map(b => {
+                    const pct = maxActual > 0 ? (b.actual / maxActual * 100).toFixed(1) : 0;
+                    return `
+                      <div class="fin-bar-row">
+                        <span class="fin-bar-label">${b.category}</span>
+                        <div class="fin-bar-track">
+                          <div class="fin-bar-fill" style="--pct:${pct}"></div>
+                        </div>
+                        <span class="fin-bar-amount">$${b.actual.toFixed(2)}</span>
+                      </div>`;
+                }).join('');
+            } else {
+                container.innerHTML = '<p class="fin-empty-hint">No spending data for this period.</p>';
+            }
+            return;
+        }
+
+        if (hint) hint.classList.add('hidden');
+        // Has goals — render paired actual vs budget bars
+        const maxVal = Math.max(...budgetActual.flatMap(b => [b.actual, b.budget]));
+        container.innerHTML = budgetActual.map(b => {
+            const actualPct = maxVal > 0 ? (b.actual / maxVal * 100).toFixed(1) : 0;
+            const budgetPct = maxVal > 0 ? (b.budget / maxVal * 100).toFixed(1) : 0;
+            const overBudget = b.budget > 0 && b.actual > b.budget;
+            return `
+              <div class="fin-budget-row">
+                <span class="fin-bar-label">${b.category}</span>
+                <div class="fin-budget-bars">
+                  <div class="fin-bar-track fin-budget-bar-actual">
+                    <div class="fin-bar-fill${overBudget ? ' fin-dominant' : ''}" style="--pct:${actualPct}" title="Actual: $${b.actual.toFixed(2)}"></div>
+                  </div>
+                  <div class="fin-bar-track fin-budget-bar-budget">
+                    <div class="fin-bar-fill" style="--pct:${budgetPct}" title="Budget: $${b.budget.toFixed(2)}"></div>
+                  </div>
+                </div>
+                <span class="fin-bar-amount">$${b.actual.toFixed(2)} / $${b.budget.toFixed(2)}</span>
+              </div>`;
+        }).join('');
+    }
+
+    function renderTrend(trend) {
+        const container = document.getElementById('fin-trend-chart');
+        if (!container) return;
+        if (!trend || trend.length === 0) { container.innerHTML = '<p class="fin-empty-hint">Upload multiple months to see trend.</p>'; return; }
+
+        const maxSpend = Math.max(...trend.map(t => t.total_spend));
+        container.innerHTML = trend.map(t => {
+            const pct = maxSpend > 0 ? (t.total_spend / maxSpend * 100).toFixed(1) : 0;
+            return `
+              <div class="fin-bar-row">
+                <span class="fin-bar-label">${t.period_label}</span>
+                <div class="fin-bar-track">
+                  <div class="fin-bar-fill" style="--pct:${pct}"></div>
+                </div>
+                <span class="fin-bar-amount">$${t.total_spend.toFixed(2)}</span>
+              </div>`;
+        }).join('');
+    }
+
+    function renderTransactions(transactions) {
+        const container = document.getElementById('fin-tx-list');
+        if (!container) return;
+        if (!transactions || transactions.length === 0) { container.innerHTML = '<p class="fin-empty-hint" style="padding:12px 4px">No transactions for this period.</p>'; return; }
+
+        container.innerHTML = transactions.map(tx => {
+            const isCredit = tx.type === 'credit';
+            const amountStr = `$${tx.amount.toFixed(2)}`;
+            const creditTag = isCredit ? '<span class="fin-tx-credit-tag">&#8593; Credit</span>' : '';
+            return `
+              <div class="fin-tx-row">
+                <span class="fin-tx-date">${tx.date}</span>
+                <span class="fin-tx-desc" title="${tx.description}">${tx.description}</span>
+                <span class="fin-tx-cat">${tx.category}</span>
+                <span class="fin-tx-amount ${isCredit ? 'fin-tx-credit' : ''}">${amountStr}${creditTag}</span>
+              </div>`;
+        }).join('');
+    }
+
+    // --- Onboarding step machine (Plan 05) ---
     function _startOnboarding() {
-        // Stub: Plan 05 implements the conversational onboarding flow
+        const historyEl = document.getElementById('fin-onboarding-history');
+        const inputEl = document.getElementById('fin-onboarding-input');
+        const sendBtn = document.getElementById('fin-onboarding-send');
+        const skipBtn = document.getElementById('fin-onboarding-skip');
+        if (!historyEl || !inputEl) return;
+
+        const CATEGORIES = ['Food', 'Transport', 'Shopping', 'Utilities', 'Entertainment', 'Other'];
+        const STEPS = [
+            {
+                prompt: "Hey there! I'm here to help you understand your spending. First — what are you mainly saving toward? Feel free to say something like \"saving more each month\", \"planning for a vacation\", \"building an emergency fund\", or anything else on your mind.",
+                key: 'goal_type',
+            },
+            {
+                prompt: "Thanks for sharing that. Are there any specific life events you're planning toward — like a vacation, a wedding, buying a house, or building an emergency fund? You can mention a few, or say \"nothing specific right now\".",
+                key: 'life_events',
+            },
+            {
+                prompt: "Got it. Now let's set some monthly spending targets. You can fill in as many or as few as you like — just leave ones you're not sure about at $0.",
+                key: 'budgets',
+                isForm: true,
+            },
+            {
+                prompt: "Last question — what's your time horizon for these goals? Are you thinking in terms of months, or a few years?",
+                key: 'horizon',
+            },
+        ];
+
+        let step = 0;
+        const answers = { goal_type: '', life_events: [], budgets: {}, horizon: '' };
+
+        function _appendMsg(role, text) {
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = buildMessageHTML(role, text);
+            historyEl.appendChild(wrapper);
+            historyEl.scrollTop = historyEl.scrollHeight;
+        }
+
+        function _appendBudgetForm() {
+            const formDiv = document.createElement('div');
+            formDiv.className = 'fin-onboarding-budget-form';
+            formDiv.innerHTML = `
+              <div class="fin-budget-form-grid">
+                ${CATEGORIES.map(cat => `
+                  <label class="fin-budget-form-row">
+                    <span class="fin-budget-form-label">${cat}</span>
+                    <span class="fin-budget-form-dollar">$</span>
+                    <input type="number" class="fin-budget-form-input" data-cat="${cat}" placeholder="0" min="0" step="1">
+                  </label>`).join('')}
+              </div>
+              <button id="fin-budget-submit" class="fin-confirm-btn" style="margin-top:12px">Save budgets &#8594;</button>
+            `;
+            historyEl.appendChild(formDiv);
+            historyEl.scrollTop = historyEl.scrollHeight;
+
+            formDiv.querySelector('#fin-budget-submit').addEventListener('click', () => {
+                const budgets = {};
+                formDiv.querySelectorAll('.fin-budget-form-input').forEach(inp => {
+                    const val = parseFloat(inp.value) || 0;
+                    budgets[inp.dataset.cat] = val;
+                });
+                answers.budgets = budgets;
+                _appendMsg('user', 'Monthly budgets set: ' + (CATEGORIES.filter(c => budgets[c] > 0).map(c => `${c} $${budgets[c]}`).join(', ') || 'All skipped'));
+                // Disable form
+                formDiv.querySelectorAll('input, button').forEach(el => el.disabled = true);
+                step++;
+                _advanceStep();
+            });
+        }
+
+        function _advanceStep() {
+            if (step >= STEPS.length) {
+                _completeOnboarding();
+                return;
+            }
+            const current = STEPS[step];
+            _appendMsg('assistant', current.prompt);
+            if (current.isForm) {
+                // Budget step — show form card, hide text input
+                const inputRow = inputEl.closest('.fin-chat-input-row');
+                if (inputRow) inputRow.style.display = 'none';
+                _appendBudgetForm();
+                return;
+            }
+            const inputRow = inputEl.closest('.fin-chat-input-row');
+            if (inputRow) inputRow.style.display = '';
+            inputEl.focus();
+        }
+
+        function _handleUserReply() {
+            const text = inputEl.value.trim();
+            if (!text) return;
+            _appendMsg('user', text);
+            inputEl.value = '';
+
+            // Store answer by key
+            const current = STEPS[step];
+            if (current.key === 'life_events') {
+                // Split comma-separated or treat as a single string
+                answers.life_events = text.split(/,|and /).map(s => s.trim()).filter(Boolean);
+            } else {
+                answers[current.key] = text;
+            }
+            step++;
+            _advanceStep();
+        }
+
+        async function _completeOnboarding() {
+            _appendMsg('assistant', "Perfect — I've saved your goals! You can always reset them with the \"Reset goals\" button. Let's take a look at your Dashboard now. Upload a CIBC bank statement CSV using the button at the top to get started.");
+
+            // Save to backend
+            try {
+                await fetch('/finance/goals', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(answers),
+                });
+            } catch (e) { /* non-fatal — goals saved locally for display */ }
+
+            // Transition to dashboard after a short delay
+            setTimeout(() => {
+                document.querySelectorAll('.fin-tab').forEach(t => t.style.display = '');
+                _activateTab('dashboard');
+                _loadDashboard(_currentPeriod);
+            }, 1800);
+        }
+
+        // Wire send button and Enter key
+        function _onSend() { _handleUserReply(); }
+        sendBtn?.addEventListener('click', _onSend);
+        inputEl?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _onSend(); }
+        });
+
+        // Skip button — posts a minimal skipped-goals record so onboarding is not re-triggered
+        skipBtn?.addEventListener('click', async () => {
+            try {
+                await fetch('/finance/goals', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ goal_type: 'skipped', life_events: [], budgets: {}, horizon: '' }),
+                });
+            } catch(e) {}
+            document.querySelectorAll('.fin-tab').forEach(t => t.style.display = '');
+            _activateTab('dashboard');
+            _loadDashboard(_currentPeriod);
+        });
+
+        // Start
+        _advanceStep();
     }
 
     // --- Init: wire all DOM events ---
