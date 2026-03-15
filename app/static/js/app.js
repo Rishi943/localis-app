@@ -2926,29 +2926,71 @@ const rsbStats = (() => {
   return { start, stop, updateContextBar, addChars };
 })();
 
-// Right sidebar system prompt preset chips
-document.querySelectorAll('#rsb-prompt-presets .rsb-pchip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    const PRESETS = {
-      default:  '',
-      creative: 'You are Localis, a creative AI assistant. Embrace imaginative thinking, explore unconventional angles, and write with personality and flair.',
-      planning: 'You are Localis, a planning assistant. Help break down goals into clear implementation steps. Be structured, actionable, and concise.',
-      custom:   '',
-    };
-    const preset = chip.dataset.preset;
-    if (!(preset in PRESETS)) return;
+// ── Shared Profile Map (4 canonical profiles) ───────────────────────────────
+const PROFILE_MAP = {
+    default:  { label: 'Default',  prompt: 'You are Localis, a helpful local AI assistant.' },
+    custom:   { label: 'Custom',   prompt: '' },  // user-editable
+    creative: { label: 'Creative', prompt: 'You are Localis, a creative brainstorming partner. Think broadly, suggest unexpected ideas, and explore multiple angles before converging.' },
+    planning: { label: 'Planning', prompt: 'You are Localis, a precise implementation planner. Break tasks into concrete steps, identify dependencies, and flag risks early.' },
+};
 
-    // Activate this chip; deactivate modal tags (sidebar presets ≠ profile tags)
-    document.querySelectorAll('#rsb-prompt-presets .rsb-pchip').forEach(c => c.classList.remove('active'));
-    chip.classList.add('active');
-    document.querySelectorAll('#modal-profile-tags .modal-profile-tag').forEach(b => b.classList.remove('active'));
-    _activeProfileLabel = null;
+// setActiveProfile — single function used by RSB chips, settings modal, and loadSettings
+function setActiveProfile(key) {
+    if (!PROFILE_MAP[key]) return;
 
-    const val = PRESETS[preset];
+    // Update RSB preset chips
+    document.querySelectorAll('#rsb-prompt-presets .rsb-pchip').forEach(c =>
+        c.classList.toggle('active', c.dataset.preset === key));
+
+    // Update settings modal profile chips (if rendered)
+    document.querySelectorAll('#settings-profile-list .profile-chip').forEach(c =>
+        c.classList.toggle('active', c.dataset.profileKey === key));
+
+    // Update the settings profile textarea with the profile's prompt
+    const promptTA = document.getElementById('set-sys-prompt');
+    if (promptTA) promptTA.value = PROFILE_MAP[key].prompt;
+
+    // Apply prompt to the hidden system prompt editor (legacy compat)
+    const val = PROFILE_MAP[key].prompt;
     if (els.systemPromptEditor) els.systemPromptEditor.value = val;
     if (els.modalSystemPrompt)  els.modalSystemPrompt.value = val;
     api.saveSystemPrompt?.();
-  });
+
+    // Track active profile in state
+    state.activeProfile = key;
+}
+
+// renderSettingsProfiles — populate the Profiles tab chip list from PROFILE_MAP
+function renderSettingsProfiles() {
+    const list = document.getElementById('settings-profile-list');
+    if (!list) return;
+    list.innerHTML = '';
+    Object.entries(PROFILE_MAP).forEach(([key, profile]) => {
+        const chip = document.createElement('button');
+        chip.className = 'profile-chip' + (state.activeProfile === key ? ' active' : '');
+        chip.textContent = profile.label;
+        chip.dataset.profileKey = key;
+        chip.addEventListener('click', () => {
+            setActiveProfile(key);
+            // If custom profile, allow editing in textarea
+            if (key === 'custom') {
+                const promptTA = document.getElementById('set-sys-prompt');
+                if (promptTA) {
+                    promptTA.value = PROFILE_MAP.custom.prompt;
+                    promptTA.focus();
+                }
+            }
+        });
+        list.appendChild(chip);
+    });
+}
+
+// Right sidebar system prompt preset chips — delegated to setActiveProfile
+document.querySelectorAll('#rsb-prompt-presets .rsb-pchip').forEach(chip => {
+    chip.addEventListener('click', () => {
+        const preset = chip.dataset.preset;
+        if (PROFILE_MAP[preset]) setActiveProfile(preset);
+    });
 });
 
 const ragUI = {
@@ -3659,7 +3701,143 @@ if (els.btnTopSettings) {
         if (els.btnOpenSettings) els.btnOpenSettings.click();
     });
 }
+// LSB footer gear (collapsed state) opens right sidebar (legacy behaviour preserved)
 document.getElementById('btn-lsb-settings')?.addEventListener('click', () => toggleSettings(true));
+
+// ── App Settings Modal (new full-page settings overlay) ─────────────────────
+(function initSettingsModal() {
+    const overlay = document.getElementById('settings-overlay');
+    if (!overlay) return;
+
+    // Tab switching
+    overlay.querySelectorAll('.settings-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            overlay.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+            overlay.querySelectorAll('.settings-pane').forEach(p => p.classList.remove('active'));
+            tab.classList.add('active');
+            overlay.querySelector(`.settings-pane[data-pane="${tab.dataset.tab}"]`)?.classList.add('active');
+        });
+    });
+
+    // Open settings modal
+    function openSettingsModal() {
+        overlay.classList.remove('hidden');
+        renderSettingsProfiles();
+        // Pre-fill inference fields from existing hidden inputs (legacy compat)
+        const setCtx = document.getElementById('set-ctx');
+        const setGpu = document.getElementById('set-gpu-layers');
+        if (setCtx && els.inputs?.ctx) setCtx.value = els.inputs.ctx.value || 4096;
+        if (setGpu && els.inputs?.layers) setGpu.value = els.inputs.layers.value || 35;
+        // Pre-fill accent colour
+        const setAccent = document.getElementById('set-accent');
+        if (setAccent) {
+            const computed = getComputedStyle(document.documentElement).getPropertyValue('--accent-primary').trim();
+            if (computed) setAccent.value = computed.replace(/\s/g, '');
+        }
+    }
+
+    // Close settings modal
+    function closeSettingsModal() {
+        overlay.classList.add('hidden');
+    }
+
+    // Wire close button
+    document.getElementById('btn-settings-close')?.addEventListener('click', closeSettingsModal);
+
+    // Close on backdrop click
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeSettingsModal(); });
+
+    // Close on Escape
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeSettingsModal();
+    });
+
+    // Wire save button
+    document.getElementById('btn-settings-save')?.addEventListener('click', saveSettings);
+
+    // Wire top-bar settings button to open settings modal (override old behaviour)
+    if (els.btnTopSettings) {
+        // Remove any previously attached listeners by cloning
+        const newBtn = els.btnTopSettings.cloneNode(true);
+        els.btnTopSettings.parentNode?.replaceChild(newBtn, els.btnTopSettings);
+        els.btnTopSettings = newBtn;
+        newBtn.addEventListener('click', openSettingsModal);
+    }
+
+    // Custom prompt textarea: update PROFILE_MAP.custom on input so save picks it up
+    const promptTA = document.getElementById('set-sys-prompt');
+    if (promptTA) {
+        promptTA.addEventListener('input', () => {
+            if (state.activeProfile === 'custom') {
+                PROFILE_MAP.custom.prompt = promptTA.value;
+            }
+        });
+    }
+
+    // Populate model select from existing model list when opened
+    const setModel = document.getElementById('set-model');
+    if (setModel && window._modelsList) {
+        window._modelsList.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.name;
+            opt.textContent = m.name.replace(/\.gguf$/i, '');
+            setModel.appendChild(opt);
+        });
+    }
+
+    // Export openSettingsModal so other code can call it
+    window.openSettingsModal = openSettingsModal;
+})();
+
+// ── Settings Save ────────────────────────────────────────────────────────────
+async function saveSettings() {
+    const payload = {
+        accent_color: document.getElementById('set-accent')?.value || '#5A8CFF',
+        wallpaper_opacity: parseFloat(document.getElementById('set-wall-opacity')?.value || 0.3),
+        gpu_layers: parseInt(document.getElementById('set-gpu-layers')?.value || 35),
+        context_size: parseInt(document.getElementById('set-ctx')?.value || 4096),
+        active_profile: state.activeProfile || 'default',
+        custom_profile_prompt: PROFILE_MAP.custom?.prompt || '',
+    };
+    try {
+        const res = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+            // Apply accent colour immediately
+            if (payload.accent_color) {
+                document.documentElement.style.setProperty('--accent-primary', payload.accent_color);
+            }
+            document.getElementById('settings-overlay')?.classList.add('hidden');
+        } else {
+            Logger.warn('Settings', 'Save returned non-OK status', res.status);
+        }
+    } catch (e) {
+        Logger.warn('Settings', 'Settings save failed', e);
+    }
+}
+
+// ── Settings Load (called on startup) ───────────────────────────────────────
+async function loadSettings() {
+    try {
+        const res = await fetch('/api/settings');
+        if (!res.ok) return;
+        const s = await res.json();
+        if (s.accent_color) {
+            document.documentElement.style.setProperty('--accent-primary', s.accent_color);
+        }
+        if (s.custom_profile_prompt && PROFILE_MAP.custom) {
+            PROFILE_MAP.custom.prompt = s.custom_profile_prompt;
+        }
+        if (s.active_profile) setActiveProfile(s.active_profile);
+        else setActiveProfile('default');
+    } catch (e) {
+        // Silently skip — settings are optional
+        Logger.debug('Settings', 'loadSettings failed (non-fatal)', e);
+    }
+}
 
 if(els.prompt) els.prompt.addEventListener('input', function() {
     this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px';
@@ -6407,6 +6585,9 @@ const startApp = async () => {
     // Restore thinking mode for current session
     const thinkMode = getSessionThinkMode(state.sessionId);
     setSessionThinkMode(state.sessionId, thinkMode);
+
+    // Load persisted settings (accent colour, active profile) — non-blocking
+    loadSettings();
 
     // Initialize Tools Picker
     toolsUI.init();
