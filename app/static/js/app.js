@@ -2260,7 +2260,9 @@ const toolsUI = {
 
         msgDiv.appendChild(contentDiv);
         chatHistory.appendChild(msgDiv);
-        chatHistory.scrollTop = chatHistory.scrollHeight;
+        // Scroll the viewport (#chat-zone), not the inner container (#chat-history)
+        const chatViewport = els.chatZone || document.getElementById('chat-zone');
+        if (chatViewport) chatViewport.scrollTop = chatViewport.scrollHeight;
 
         return msgDiv;
     },
@@ -3552,17 +3554,22 @@ if(els.btnSidebarToggle) els.btnSidebarToggle.addEventListener('click', () => {
 });
 
 const toggleSettings = (show) => {
-    state.rightSidebarOpen = show;
-    els.rightSidebar.classList.toggle('visible', show);
+    const rsb = els.rightSidebar;
+    if (!rsb) return;
+    // Determine intended open/closed state
+    const shouldOpen = (show !== undefined) ? show : rsb.classList.contains('collapsed');
+    state.rightSidebarOpen = shouldOpen;
+    // Use .collapsed (CSS-controlled width) — .visible has no CSS rule
+    rsb.classList.toggle('collapsed', !shouldOpen);
 
     // In tutorial mode, keep rail visible and use body class for narrator reflow
     if (document.body.classList.contains('first-run-tutorial')) {
-        document.body.classList.toggle('frt-settings-open', show);
+        document.body.classList.toggle('frt-settings-open', shouldOpen);
         // Don't hide the rail in tutorial mode - it stays as the handle
     } else {
         // Normal mode: hide rail when sidebar opens
         if(els.rightRail) {
-            if(show) els.rightRail.classList.add('hidden');
+            if(shouldOpen) els.rightRail.classList.add('hidden');
             else els.rightRail.classList.remove('hidden');
         }
     }
@@ -3716,7 +3723,9 @@ const appendMessage = (role, text) => {
         }
     }
     els.chatHistory.appendChild(rowEl);
-    els.chatHistory.scrollTop = els.chatHistory.scrollHeight;
+    // Scroll the viewport (#chat-zone), not the inner container (#chat-history)
+    const _vp = els.chatZone || document.getElementById('chat-zone');
+    if (_vp) _vp.scrollTop = _vp.scrollHeight;
     rsbStats.addChars(text.length);
 };
 
@@ -4787,10 +4796,11 @@ const api = {
                 if (scrollPending) return;
                 scrollPending = true;
                 requestAnimationFrame(() => {
-                    // Only scroll if user is near bottom (within 100px)
-                    const isNearBottom = els.chatHistory.scrollHeight - els.chatHistory.scrollTop - els.chatHistory.clientHeight < 100;
-                    if (isNearBottom) {
-                        els.chatHistory.scrollTop = els.chatHistory.scrollHeight;
+                    // Scroll the viewport (#chat-zone), not the inner container (#chat-history)
+                    const vp = els.chatZone || document.getElementById('chat-zone');
+                    if (vp) {
+                        const isNearBottom = vp.scrollHeight - vp.scrollTop - vp.clientHeight < 120;
+                        if (isNearBottom) vp.scrollTop = vp.scrollHeight;
                     }
                     scrollPending = false;
                 });
