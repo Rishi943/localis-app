@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 02-financial-advisor/02-04-PLAN.md
-last_updated: "2026-03-15T23:07:34.089Z"
+stopped_at: Completed 02-financial-advisor/02-05-PLAN.md
+last_updated: "2026-03-15T23:10:44.971Z"
 last_activity: 2026-03-14 — Roadmap created; 25 v1 requirements mapped across 6 phases
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
   percent: 0
 ---
 
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02-financial-advisor P03 | 15 | 2 tasks | 2 files |
 | Phase 02-financial-advisor P02 | 5 | 2 tasks | 4 files |
 | Phase 02-financial-advisor P04 | 15 | 2 tasks | 4 files |
+| Phase 02-financial-advisor P05 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,8 @@ Recent decisions affecting current work:
 - [Phase 02-financial-advisor]: TestClient conftest fixture uses context manager so on_event(startup)/init_db() fires before tests
 - [Phase 02-financial-advisor]: Both /finance/dashboard_data and /finance/dashboard added — existing test calls /dashboard, plan spec uses /dashboard_data; both share _run_dashboard_queries() helper
 - [Phase 02-financial-advisor]: fin_onboarding_done added to GET /api/settings key list so test_finance_onboarding.py can verify flag via settings endpoint
+- [Phase 02-financial-advisor]: requestAnimationFrame fires after innerHTML render to allow CSS transition on --pct property to animate bar fills
+- [Phase 02-financial-advisor]: Onboarding step machine advances by index — no NLP parsing of user replies; step determines which answer key to store
 
 ### Pending Todos
 
@@ -105,6 +108,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-15T23:07:34.087Z
-Stopped at: Completed 02-financial-advisor/02-04-PLAN.md
+Last session: 2026-03-15T23:10:44.969Z
+Stopped at: Completed 02-financial-advisor/02-05-PLAN.md
 Resume file: None
