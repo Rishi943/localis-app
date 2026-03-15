@@ -2,7 +2,7 @@
 
 ## Overview
 
-Localis is shipping six feature phases on top of an already-functional local AI assistant. The foundation is solid — inference, memory, RAG, voice, and Midnight Glass UI are all live. These phases layer in polish and new capabilities: first tightening the visual surface so every subsequent feature looks right, then adding model parameter control, a news feed, voice-driven music, financial analysis, and a social writing assistant. Each phase delivers one complete, verifiable capability that Rishi can use daily before the next begins.
+Localis is shipping six feature phases on top of an already-functional local AI assistant. The foundation is solid — inference, memory, RAG, voice, and Midnight Glass UI are all live. These phases layer in polish and new capabilities: first tightening the visual surface so every subsequent feature looks right, then adding a goal-oriented financial advisor, model parameter control, a news feed, voice-driven music, and a social writing assistant. Each phase delivers one complete, verifiable capability that Rishi can use daily before the next begins.
 
 ## Phases
 
@@ -12,11 +12,11 @@ Localis is shipping six feature phases on top of an already-functional local AI 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: UI Polish** - Resolve layout/spacing/navigation inconsistencies so the app feels cohesive and demo-ready
-- [ ] **Phase 2: LAB** - Expose model inference parameters (temp, top_p, context size, GPU layers, repeat penalty) with DB persistence
-- [ ] **Phase 3: News RSS Feed** - Aggregated r/LocalLLaMA + custom RSS feed, filterable and readable in-app
-- [ ] **Phase 4: YouTube Music via HA** - Voice-command music playback and control routed through Home Assistant media_player
-- [ ] **Phase 5: Financial Advisor** - CSV bank statement upload, auto-categorised expense dashboard with charts, RAG-powered financial chat
+- [x] **Phase 1: UI Polish** - Resolve layout/spacing/navigation inconsistencies so the app feels cohesive and demo-ready
+- [ ] **Phase 2: Financial Advisor** - Goal-oriented financial onboarding + CIBC CSV upload → SQLite → glass dashboard + LLM chat over spending data
+- [ ] **Phase 3: LAB** - Expose model inference parameters (temp, top_p, context size, GPU layers, repeat penalty) with DB persistence
+- [ ] **Phase 4: News RSS Feed** - Aggregated r/LocalLLaMA + custom RSS feed, filterable and readable in-app
+- [ ] **Phase 5: YouTube Music via HA** - Voice-command music playback and control routed through Home Assistant media_player
 - [ ] **Phase 6: Post+** - Per-platform (Reddit/LinkedIn) writing style mimicry from user examples with soft-warn quality indicator
 
 ## Phase Details
@@ -33,16 +33,29 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 6 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — CSS foundation: variable consolidation, glass recipe, responsive widths, ghost scrollbar
-- [ ] 01-02-PLAN.md — Bug fixes: session list class, sidebar collapse system, auto-scroll target
-- [ ] 01-03-PLAN.md — Chat surface: input pill, tool chips, action chips, thinking collapse, empty state, voice bar, token estimate
-- [ ] 01-04-PLAN.md — RSB polish + branding: section labels, dividers, compact stats, Jarvis→Localis rename, date separators
-- [ ] 01-05-PLAN.md — Settings modal: build HTML, glass styling, 4-profile sync between RSB and modal, settings persistence
-- [ ] 01-06-PLAN.md — Visual verification checkpoint: human sign-off on all 4 requirements at 1080p and 1440p
+- [x] 01-01-PLAN.md — CSS foundation: variable consolidation, glass recipe, responsive widths, ghost scrollbar
+- [x] 01-02-PLAN.md — Bug fixes: session list class, sidebar collapse system, auto-scroll target
+- [x] 01-03-PLAN.md — Chat surface: input pill, tool chips, action chips, thinking collapse, empty state, voice bar, token estimate
+- [x] 01-04-PLAN.md — RSB polish + branding: section labels, dividers, compact stats, Jarvis→Localis rename, date separators
+- [x] 01-05-PLAN.md — Settings modal: build HTML, glass styling, 4-profile sync between RSB and modal, settings persistence
+- [x] 01-06-PLAN.md — Visual verification checkpoint: human sign-off on all 4 requirements at 1080p and 1440p
 
-### Phase 2: LAB
-**Goal**: Users can tune model inference parameters through the UI and have those settings persist across sessions, giving students and power users full control without editing config files
+### Phase 2: Financial Advisor
+**Goal**: Users go through a goal-setting onboarding conversation, then upload CIBC bank statement CSVs to see a Midnight Glass spending dashboard (category breakdown, budget vs actual, monthly trend, transaction list) and chat with the LLM about their finances — all deterministic SQL for numbers, all local, zero cloud
 **Depends on**: Phase 1
+**Requirements**: FIN-01, FIN-02, FIN-03, FIN-04, FIN-05, FIN-06
+**Success Criteria** (what must be TRUE):
+  1. First time the Finance panel opens, the Narrator/FRT onboarding flow runs — user is asked about financial goals (save, invest, life events: vacation, wedding, house), budgets per category, and time horizon; answers persist to DB
+  2. User can upload a CIBC CSV export, specify the time period it covers, and have all transactions parsed into a SQLite transactions table with no data leaving the device
+  3. Every transaction is automatically assigned to one of the predefined categories (Food, Transport, Shopping, Utilities, Entertainment, Other) via deterministic rules — no LLM involved in categorisation
+  4. The Dashboard tab shows glass CSS charts: category spend breakdown, budget vs actual per category, monthly trend, and a scrollable transaction list — all numbers from SQL queries, not the LLM
+  5. Multiple CSV uploads (e.g. 6 months one by one) accumulate correctly — each tagged with its user-defined time period — and the dashboard aggregates across all uploaded periods
+  6. The Chat tab lets the user ask natural language questions about their spending; the LLM receives SQL-generated context (not raw CSV) and answers accurately
+**Plans**: TBD
+
+### Phase 3: LAB
+**Goal**: Users can tune model inference parameters through the UI and have those settings persist across sessions, giving students and power users full control without editing config files
+**Depends on**: Phase 2
 **Requirements**: LAB-01, LAB-02, LAB-03, LAB-04, LAB-05
 **Success Criteria** (what must be TRUE):
   1. User can slide or input temperature and top-p / top-k values; the next chat inference call uses those values
@@ -52,9 +65,9 @@ Plans:
   5. A single "Reset to defaults" action restores all LAB parameters to their base values
 **Plans**: TBD
 
-### Phase 3: News RSS Feed
+### Phase 4: News RSS Feed
 **Goal**: Users have a live, filterable news feed showing top posts from r/LocalLLaMA and any custom RSS sources they configure, readable in-app without opening a browser
-**Depends on**: Phase 2
+**Depends on**: Phase 3
 **Requirements**: RSS-01, RSS-02, RSS-03, RSS-04
 **Success Criteria** (what must be TRUE):
   1. Opening the News Feed panel shows current top posts from r/LocalLLaMA with titles, sources, and timestamps
@@ -63,26 +76,15 @@ Plans:
   4. Clicking a post opens a Midnight Glass reader panel that displays the full post content inside the app
 **Plans**: TBD
 
-### Phase 4: YouTube Music via HA
+### Phase 5: YouTube Music via HA
 **Goal**: Users can control YouTube Music playback entirely by voice through Localis, with Home Assistant routing the actual media_player service calls — no extra apps needed
-**Depends on**: Phase 3
+**Depends on**: Phase 4
 **Requirements**: MUSIC-01, MUSIC-02, MUSIC-03, MUSIC-04
 **Success Criteria** (what must be TRUE):
   1. Saying "Hey Jarvis, play [song] by [artist]" causes HA media_player to begin playing that track via YouTube Music within a few seconds
   2. Saying "Hey Jarvis, stop" or "pause the music" halts playback on the HA media_player entity
   3. Saying "Hey Jarvis, turn up the volume" or "set volume to 50%" adjusts HA media_player volume accordingly
   4. Saying "Hey Jarvis, next song" or "skip this" advances the HA media_player to the next track
-**Plans**: TBD
-
-### Phase 5: Financial Advisor
-**Goal**: Users can upload a bank statement CSV and immediately see a categorised expense breakdown with a chart, then ask the LLM natural-language questions about their spending — all locally, with no financial data leaving the device
-**Depends on**: Phase 4
-**Requirements**: FIN-01, FIN-02, FIN-03, FIN-04
-**Success Criteria** (what must be TRUE):
-  1. User can upload a CSV bank statement file in the Financial Advisor section and receive a confirmation that it was ingested
-  2. After upload, every transaction is assigned to a category (Food, Transport, Shopping, Utilities, Entertainment, or Other) without user intervention
-  3. User sees a pie chart dashboard showing spend by category for the uploaded period, with category labels and amounts visible
-  4. User can type or speak a question about their statement (e.g. "What did I spend most on last month?") and receive an accurate, RAG-grounded answer
 **Plans**: TBD
 
 ### Phase 6: Post+
@@ -104,9 +106,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. UI Polish | 5/6 | In Progress|  |
-| 2. LAB | 0/TBD | Not started | - |
-| 3. News RSS Feed | 0/TBD | Not started | - |
-| 4. YouTube Music via HA | 0/TBD | Not started | - |
-| 5. Financial Advisor | 0/TBD | Not started | - |
+| 1. UI Polish | 6/6 | Complete | 2026-03-15 |
+| 2. Financial Advisor | 0/TBD | Not started | - |
+| 3. LAB | 0/TBD | Not started | - |
+| 4. News RSS Feed | 0/TBD | Not started | - |
+| 5. YouTube Music via HA | 0/TBD | Not started | - |
 | 6. Post+ | 0/TBD | Not started | - |

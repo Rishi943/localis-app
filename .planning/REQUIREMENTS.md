@@ -14,6 +14,15 @@ Requirements for the active feature build cycle. Adds to the existing shipped ba
 - [x] **UI-03**: Chat interface presents messages cleanly — bubbles, input bar pill, streaming display without end-pop, smooth scroll behaviour
 - [x] **UI-04**: All components share visual cohesion — glass effects, border consistency, and typography hierarchy match UIUX/DESIGN.md
 
+### Financial Advisor
+
+- [ ] **FIN-01**: First time the Finance panel opens, the Narrator/FRT onboarding flow runs — user is guided to articulate financial goals (save, invest, life events such as vacation/wedding/house), monthly budgets per category, and time horizon; all answers persist to SQLite
+- [ ] **FIN-02**: User can upload a CIBC bank statement CSV, specify the time period it covers, and have all transactions parsed into a SQLite transactions table — no data leaves the device
+- [ ] **FIN-03**: App auto-categorises transactions into predefined categories (Food, Transport, Shopping, Utilities, Entertainment, Other) via deterministic rules — no LLM involved in categorisation
+- [ ] **FIN-04**: Dashboard tab shows glass CSS charts: category spend breakdown, budget vs actual per category, monthly trend, and a scrollable transaction list — all numbers from SQL queries
+- [ ] **FIN-05**: Multiple CSV uploads accumulate correctly, each tagged with its user-defined time period; dashboard aggregates across all uploaded periods
+- [ ] **FIN-06**: Chat tab lets the user ask natural language questions about their spending; LLM receives SQL-generated context (not raw CSV) and answers accurately
+
 ### LAB (Model Parameter Playground)
 
 - [ ] **LAB-01**: User can adjust temperature and top-p / top-k sampling parameters and see them applied to the next inference call
@@ -35,13 +44,6 @@ Requirements for the active feature build cycle. Adds to the existing shipped ba
 - [ ] **MUSIC-02**: User can say "Hey Jarvis, stop" or "pause the music" and HA media_player stops/pauses
 - [ ] **MUSIC-03**: User can say "Hey Jarvis, turn up/down the volume" or "set volume to [N]%" and HA adjusts media_player volume
 - [ ] **MUSIC-04**: User can say "Hey Jarvis, next song" or "skip this" and HA advances to the next track
-
-### Financial Advisor
-
-- [ ] **FIN-01**: User can upload a CSV bank statement file in the Financial Advisor section
-- [ ] **FIN-02**: App auto-categorises transactions (Food, Transport, Shopping, Utilities, Entertainment, Other)
-- [ ] **FIN-03**: User sees an expense dashboard with a pie chart showing spend by category for the uploaded period
-- [ ] **FIN-04**: User can chat with the LLM about their statement data; responses use RAG over the uploaded statement
 
 ### Post+ (Writing Style Mimicry)
 
@@ -72,7 +74,6 @@ Acknowledged but deferred to next milestone.
 
 - **FIN-V2-01**: OFX / QFX bank statement format support
 - **FIN-V2-02**: PDF bank statement support (text-layer extraction)
-- **FIN-V2-03**: Month-over-month spending trend chart
 - **FIN-V2-04**: User can tag or re-categorise individual transactions
 
 ### Post+ Enhancements
@@ -92,10 +93,11 @@ Acknowledged but deferred to next milestone.
 | Mobile app | Web-first for v1 |
 | Real-time collaboration | Single-user local app |
 | Any external analytics or telemetry | Privacy-first — no data leaves the device |
+| RAG over raw CSV for financial chat | Replaced by deterministic SQL context injection |
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+Which phases cover which requirements. Updated after phase reorder (2026-03-15).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -103,23 +105,25 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-02 | Phase 1 | Complete |
 | UI-03 | Phase 1 | Complete |
 | UI-04 | Phase 1 | Complete |
-| LAB-01 | Phase 2 | Pending |
-| LAB-02 | Phase 2 | Pending |
-| LAB-03 | Phase 2 | Pending |
-| LAB-04 | Phase 2 | Pending |
-| LAB-05 | Phase 2 | Pending |
-| RSS-01 | Phase 3 | Pending |
-| RSS-02 | Phase 3 | Pending |
-| RSS-03 | Phase 3 | Pending |
-| RSS-04 | Phase 3 | Pending |
-| MUSIC-01 | Phase 4 | Pending |
-| MUSIC-02 | Phase 4 | Pending |
-| MUSIC-03 | Phase 4 | Pending |
-| MUSIC-04 | Phase 4 | Pending |
-| FIN-01 | Phase 5 | Pending |
-| FIN-02 | Phase 5 | Pending |
-| FIN-03 | Phase 5 | Pending |
-| FIN-04 | Phase 5 | Pending |
+| FIN-01 | Phase 2 | Pending |
+| FIN-02 | Phase 2 | Pending |
+| FIN-03 | Phase 2 | Pending |
+| FIN-04 | Phase 2 | Pending |
+| FIN-05 | Phase 2 | Pending |
+| FIN-06 | Phase 2 | Pending |
+| LAB-01 | Phase 3 | Pending |
+| LAB-02 | Phase 3 | Pending |
+| LAB-03 | Phase 3 | Pending |
+| LAB-04 | Phase 3 | Pending |
+| LAB-05 | Phase 3 | Pending |
+| RSS-01 | Phase 4 | Pending |
+| RSS-02 | Phase 4 | Pending |
+| RSS-03 | Phase 4 | Pending |
+| RSS-04 | Phase 4 | Pending |
+| MUSIC-01 | Phase 5 | Pending |
+| MUSIC-02 | Phase 5 | Pending |
+| MUSIC-03 | Phase 5 | Pending |
+| MUSIC-04 | Phase 5 | Pending |
 | POST-01 | Phase 6 | Pending |
 | POST-02 | Phase 6 | Pending |
 | POST-03 | Phase 6 | Pending |
@@ -127,10 +131,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | POST-05 | Phase 6 | Pending |
 
 **Coverage:**
-- v1 requirements: 25 total
-- Mapped to phases: 25
+- v1 requirements: 29 total
+- Mapped to phases: 29
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-14*
-*Last updated: 2026-03-14 after initial definition*
+*Last updated: 2026-03-15 — Financial Advisor moved to Phase 2, spec updated (CIBC CSV, SQL-only analysis, goal-setting onboarding, glass dashboard). Phase order: 1→UI Polish, 2→Financial Advisor, 3→LAB, 4→RSS, 5→YouTube Music, 6→Post+*
