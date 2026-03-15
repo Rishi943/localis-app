@@ -1599,6 +1599,7 @@ const els = {
     rightSidebarToggle:    document.getElementById('right-sidebar-toggle'),
     tbModelName:           document.getElementById('tb-model-name'),
     btnTopSettings:        document.getElementById('btn-top-settings'),
+    chatZone:              document.getElementById('chat-zone'),
 };
 
 // ============================================================
@@ -2737,7 +2738,8 @@ const rsbModel = (() => {
     models.forEach(m => {
       const item = document.createElement('div');
       item.className = 'rsb-model-item' + (m.name === _selectedModel ? ' selected' : '');
-      item.textContent = `${m.name}  (${m.size_gb} GB)`;
+      const displayName = m.name.replace(/\.gguf$/i, '');
+      item.innerHTML = `${displayName}&ensp;<span style="color:rgba(255,255,255,.4)">${m.size_gb} GB</span>`;
       item.title = m.name;
       item.addEventListener('click', () => {
         _selectedModel = m.name;
@@ -2752,7 +2754,7 @@ const rsbModel = (() => {
   }
 
   function updateStatus(modelName) {
-    if (els.rsbModelName) els.rsbModelName.textContent = modelName || 'No model loaded';
+    if (els.rsbModelName) els.rsbModelName.textContent = modelName ? modelName.replace(/\.gguf$/i, '') : 'No model loaded';
     if (els.rsbModelStatus) {
       els.rsbModelStatus.textContent = modelName ? '● ONLINE' : '● OFFLINE';
       els.rsbModelStatus.className = 'rsb-model-st ' + (modelName ? 'online' : 'offline');
@@ -3617,6 +3619,7 @@ if (els.btnTopSettings) {
         if (els.btnOpenSettings) els.btnOpenSettings.click();
     });
 }
+document.getElementById('btn-lsb-settings')?.addEventListener('click', () => toggleSettings(true));
 
 if(els.prompt) els.prompt.addEventListener('input', function() {
     this.style.height = 'auto'; this.style.height = (this.scrollHeight) + 'px';
@@ -3673,14 +3676,6 @@ const updateStatus = (online, msg) => {
     els.modelStatus.textContent = online ? "STATUS: ONLINE" : "STATUS: OFFLINE";
     els.modelStatus.style.color = online ? "#10B981" : "#EF4444";
 };
-
-function updateSessionDisplay() {
-    const display = document.getElementById('session-id-display');
-    if (display) {
-        // Show first 12 chars of session ID
-        display.textContent = state.sessionId.substring(0, 12);
-    }
-}
 
 function buildMessageHTML(role, text) {
     const isUser = role === 'user';
@@ -4496,12 +4491,12 @@ const api = {
             });
             api.updateModelMeta();
             if(data.current) {
-                state.modelLoaded = true; els.modelDisplay.textContent = data.current;
+                state.modelLoaded = true; els.modelDisplay.textContent = (data.current || '').replace(/\.gguf$/i, '');
                 updateStatus(true, "Connected");
                 const welcome = document.querySelector('.welcome-container');
                 if (welcome) welcome.remove();
                 // Update right sidebar model status
-                if (els.rsbModelName) els.rsbModelName.textContent = data.current;
+                if (els.rsbModelName) els.rsbModelName.textContent = data.current.replace(/\.gguf$/i, '');
                 if (els.rsbModelStatus) {
                     els.rsbModelStatus.textContent = '● ONLINE';
                     els.rsbModelStatus.className = 'rsb-model-st online';
@@ -4537,7 +4532,7 @@ const api = {
             if (data.sessions && data.sessions.length > 0) {
                 data.sessions.forEach(s => {
                     const div = document.createElement('div');
-                    div.className = `session-item ${s.id === state.sessionId ? 'active' : ''}`;
+                    div.className = `sess-item ${s.id === state.sessionId ? 'active' : ''}`;
 
                     const titleSpan = document.createElement('span');
                     titleSpan.textContent = s.title || s.id;
@@ -4566,7 +4561,6 @@ const api = {
                         state.sessionId = s.id;
                         api.getSessions();
                         api.loadHistory();
-                        updateSessionDisplay();
 
                         // Restore thinking preference for this session
                         const thinkMode = getSessionThinkMode(s.id);
@@ -4594,7 +4588,7 @@ const api = {
             });
             if(!res.ok) throw new Error("Load failed");
             const data = await res.json();
-            state.modelLoaded = true; els.modelDisplay.textContent = data.loaded;
+            state.modelLoaded = true; els.modelDisplay.textContent = (data.loaded || '').replace(/\.gguf$/i, '');
             state.nCtx = parseInt(els.inputs.ctx.value) || 8192;
             rsbStats.updateContextBar();
             updateStatus(true, "Ready");
@@ -5044,7 +5038,6 @@ if(els.btnNewChat) els.btnNewChat.addEventListener('click', () => {
     state.sessionId = 'sess_' + Date.now();
     api.getSessions();
     els.chatHistory.innerHTML = '';
-    updateSessionDisplay();
 
     // Initialize thinking as off for new session
     setSessionThinkMode(state.sessionId, false);
@@ -6336,9 +6329,6 @@ const startApp = async () => {
 
     // Load system prompt
     api.loadSystemPrompt();
-
-    // Update session display
-    updateSessionDisplay();
 }
 
 // Initialize on DOM ready
