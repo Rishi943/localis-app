@@ -30,7 +30,15 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Left rail icon navigation scrolls to or activates the correct section; left and right sidebars collapse and expand without layout breakage
   3. Chat messages render cleanly — streaming arrives without end-pop, bubbles are properly sized, the input pill is correctly styled, and scroll behaviour is smooth
   4. All glass effects, border radii, and typography hierarchy match UIUX/DESIGN.md across every visible component
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — CSS foundation: variable consolidation, glass recipe, responsive widths, ghost scrollbar
+- [ ] 01-02-PLAN.md — Bug fixes: session list class, sidebar collapse system, auto-scroll target
+- [ ] 01-03-PLAN.md — Chat surface: input pill, tool chips, action chips, thinking collapse, empty state, voice bar, token estimate
+- [ ] 01-04-PLAN.md — RSB polish + branding: section labels, dividers, compact stats, Jarvis→Localis rename, date separators
+- [ ] 01-05-PLAN.md — Settings modal: build HTML, glass styling, 4-profile sync between RSB and modal, settings persistence
+- [ ] 01-06-PLAN.md — Visual verification checkpoint: human sign-off on all 4 requirements at 1080p and 1440p
 
 ### Phase 2: LAB
 **Goal**: Users can tune model inference parameters through the UI and have those settings persist across sessions, giving students and power users full control without editing config files
@@ -96,7 +104,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. UI Polish | 0/TBD | Not started | - |
+| 1. UI Polish | 0/6 | In progress | - |
 | 2. LAB | 0/TBD | Not started | - |
 | 3. News RSS Feed | 0/TBD | Not started | - |
 | 4. YouTube Music via HA | 0/TBD | Not started | - |
