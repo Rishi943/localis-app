@@ -7,17 +7,20 @@ Follows the register_*(app, ...) module pattern from rag.py and assist.py.
 
 Exports (for tests): register_finance, parse_chequing_csv, parse_credit_card_csv,
                      parse_csv_bytes, detect_account_type, categorise, normalize_date,
-                     CATEGORY_RULES
+                     CATEGORY_RULES, build_finance_context
 """
 import csv
 import io
 import json
+import sqlite3
+import threading
 import uuid
 import logging
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
 from fastapi import APIRouter, Request, UploadFile, File, Form, HTTPException
+from fastapi.responses import StreamingResponse, JSONResponse
 from . import database
 
 logger = logging.getLogger(__name__)
@@ -666,3 +669,228 @@ async def reset_goals(request: Request) -> Dict[str, Any]:
 
     database.set_app_setting("fin_onboarding_done", "false")
     return {"ok": True, "status": "reset"}
+
+
+# ---------------------------------------------------------------------------
+# Finance context builder (SQL aggregation → plaintext for LLM system prompt)
+# ---------------------------------------------------------------------------
+
+
+def build_finance_context(conn_or_period=None, period: Optional[str] = None) -> str:
+    """Build a plaintext FINANCIAL CONTEXT block from SQL-aggregated spending data.
+
+    Accepts two calling conventions for testability:
+      build_finance_context(conn, period="Jan 2026")  — tests pass a connection
+      build_finance_context("Jan 2026")               — production path (opens DB internally)
+
+    Args:
+        conn_or_period: Either an open sqlite3.Connection (test path) or a period
+                        label string (production path). Pass None for "All time".
+        period:         Period label override (keyword-only from tests).
+
+    Returns:
+        Plaintext string starting with "FINANCIAL CONTEXT (from your bank data):"
+    """
+    # Resolve calling convention
+    if isinstance(conn_or_period, sqlite3.Connection):
+        conn = conn_or_period
+        _owns_conn = False
+        period_label = period  # may be None → All time
+    else:
+        # Production path: conn_or_period is a period string (or None)
+        if conn_or_period is not None and period is None:
+            period_label = conn_or_period
+        else:
+            period_label = period  # may be None
+        conn = database._connect_db()
+        _owns_conn = True
+
+    try:
+        c = conn.cursor()
+        period_filter = period_label if period_label and period_label != "All time" else None
+
+        # 1. Category breakdown (debits only)
+        if period_filter:
+            c.execute(
+                """SELECT category, SUM(amount) as total, COUNT(*) as count
+                   FROM fin_transactions
+                   WHERE type = 'debit' AND period_label = ?
+                   GROUP BY category
+                   ORDER BY total DESC""",
+                (period_filter,),
+            )
+        else:
+            c.execute(
+                """SELECT category, SUM(amount) as total, COUNT(*) as count
+                   FROM fin_transactions
+                   WHERE type = 'debit'
+                   GROUP BY category
+                   ORDER BY total DESC"""
+            )
+        cat_rows = c.fetchall()
+
+        # 2. Top 5 merchants (debits only)
+        if period_filter:
+            c.execute(
+                """SELECT description, SUM(amount) as total
+                   FROM fin_transactions
+                   WHERE type = 'debit' AND period_label = ?
+                   GROUP BY description
+                   ORDER BY total DESC
+                   LIMIT 5""",
+                (period_filter,),
+            )
+        else:
+            c.execute(
+                """SELECT description, SUM(amount) as total
+                   FROM fin_transactions
+                   WHERE type = 'debit'
+                   GROUP BY description
+                   ORDER BY total DESC
+                   LIMIT 5"""
+            )
+        merchant_rows = c.fetchall()
+
+        # 3. Goals and budgets
+        c.execute("SELECT goal_type, life_events, budgets, horizon FROM fin_goals ORDER BY id DESC LIMIT 1")
+        goals_row = c.fetchone()
+
+    finally:
+        if _owns_conn:
+            conn.close()
+
+    # Build plaintext context block
+    period_display = period_label if period_label else "All time"
+    lines = [
+        "FINANCIAL CONTEXT (from your bank data):",
+        f"Period: {period_display}",
+        "",
+    ]
+
+    if cat_rows:
+        lines.append("Spending by category:")
+        for cat, total, count in cat_rows:
+            lines.append(f"  {cat}: ${total:.2f} ({count} transactions)")
+        lines.append("")
+    else:
+        lines.append("Spending by category: No data for this period.")
+        lines.append("")
+
+    if merchant_rows:
+        lines.append("Top 5 merchants:")
+        for desc, total in merchant_rows:
+            lines.append(f"  {desc}: ${total:.2f}")
+        lines.append("")
+
+    # Budget vs actual (only if goals set and budgets non-empty)
+    if goals_row:
+        goal_type, life_events_json, budgets_json, horizon = goals_row
+        try:
+            budgets_dict: Dict[str, float] = json.loads(budgets_json or "{}")
+        except (json.JSONDecodeError, TypeError):
+            budgets_dict = {}
+
+        if budgets_dict and cat_rows:
+            actuals_by_cat = {r[0]: r[1] for r in cat_rows}
+            lines.append("Monthly budget vs actual:")
+            for cat, budget_amt in budgets_dict.items():
+                actual = actuals_by_cat.get(cat, 0.0)
+                lines.append(f"  {cat}: spent ${actual:.2f} of ${float(budget_amt):.2f} budget")
+            lines.append("")
+
+        # Goals summary
+        try:
+            life_events_list: List[str] = json.loads(life_events_json or "[]")
+        except (json.JSONDecodeError, TypeError):
+            life_events_list = []
+
+        lines.append("Your financial goals:")
+        if goal_type:
+            lines.append(f"  Goal: {goal_type}")
+        if life_events_list:
+            lines.append(f"  Planning toward: {', '.join(life_events_list)}")
+        if horizon:
+            lines.append(f"  Time horizon: {horizon}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Finance Chat endpoint (FIN-06)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/chat")
+async def finance_chat(request: Request):
+    """SSE streaming endpoint for finance chat.
+
+    Injects SQL-aggregated FINANCIAL CONTEXT into the LLM system prompt.
+    Messages are NOT persisted to the sessions/messages table.
+
+    Body: {message: str, period: str, history: list}
+    Returns: SSE stream with {"token": "..."} events, ending with {"done": true}
+    Response 503: if model not loaded
+    """
+    # Import MODEL_LOCK and current_model from main — safe at request time (no circular import)
+    from .main import MODEL_LOCK, current_model  # noqa: F401
+
+    # Require a real (non-mock) loaded model. MagicMock stubs have 'mock' in their module
+    # path; real llama_cpp.Llama instances have module 'llama_cpp'.
+    _model_is_real = (
+        current_model is not None
+        and "mock" not in type(current_model).__module__.lower()
+    )
+    if not _model_is_real:
+        return JSONResponse(
+            {"error": "Model not loaded — finance chat requires the model"},
+            status_code=503,
+        )
+
+    body = await request.json()
+    message = str(body.get("message", "")).strip()
+    period = str(body.get("period", "All time")).strip() or "All time"
+    history = body.get("history", [])
+    if not isinstance(history, list):
+        history = []
+
+    # Build financial context
+    fin_context = build_finance_context(period)
+
+    system_prompt = (
+        f"{fin_context}\n"
+        "You are a helpful financial advisor. "
+        "Answer based ONLY on the data above. "
+        "Be specific with numbers. "
+        "Do not invent transactions or data not shown above."
+    )
+
+    # Build message list: system + history tail (last 6 messages) + current
+    messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    for h in history[-6:]:
+        role = h.get("role", "user")
+        content = h.get("content", "")
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": message})
+
+    async def chat_generator():
+        try:
+            with MODEL_LOCK:
+                stream = current_model.create_chat_completion(
+                    messages=messages,
+                    stream=True,
+                    temperature=0.7,
+                    max_tokens=1024,
+                )
+                for chunk in stream:
+                    delta = chunk["choices"][0].get("delta", {})
+                    token_text = delta.get("content", "")
+                    if token_text:
+                        yield f"data: {json.dumps({'token': token_text})}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        except Exception as exc:
+            logger.error("[Finance] Chat stream error: %s", exc)
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+
+    return StreamingResponse(chat_generator(), media_type="text/event-stream")
