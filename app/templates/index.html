@@ -708,6 +708,66 @@
 
 </div>
 
+<!-- APP SETTINGS MODAL -->
+<div id="settings-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="app-settings-title">
+  <div id="app-settings-modal" class="modal-dialog settings-modal">
+    <div class="modal-header">
+      <span id="app-settings-title" class="modal-title">Settings</span>
+      <button id="btn-settings-close" class="modal-close" aria-label="Close settings">&times;</button>
+    </div>
+    <div class="settings-tabs">
+      <button class="settings-tab active" data-tab="inference">Inference</button>
+      <button class="settings-tab" data-tab="appearance">Appearance</button>
+      <button class="settings-tab" data-tab="profiles">Profiles</button>
+    </div>
+    <div class="settings-body">
+
+      <!-- Inference Tab -->
+      <div class="settings-pane active" data-pane="inference">
+        <div class="settings-row">
+          <label class="settings-label">Default Model</label>
+          <select id="set-model" class="settings-select"></select>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label">Context Size</label>
+          <input id="set-ctx" type="number" class="settings-input" min="512" max="131072" step="512" value="4096">
+        </div>
+        <div class="settings-row">
+          <label class="settings-label">GPU Layers</label>
+          <input id="set-gpu-layers" type="number" class="settings-input" min="0" max="200" step="1" value="35">
+        </div>
+      </div>
+
+      <!-- Appearance Tab -->
+      <div class="settings-pane" data-pane="appearance">
+        <div class="settings-row">
+          <label class="settings-label">Accent Colour</label>
+          <input id="set-accent" type="color" class="settings-color" value="#5A8CFF">
+        </div>
+        <div class="settings-row">
+          <label class="settings-label">Wallpaper</label>
+          <input id="set-wallpaper" type="file" class="settings-file" accept="image/*">
+        </div>
+        <div class="settings-row">
+          <label class="settings-label">Wallpaper Opacity</label>
+          <input id="set-wall-opacity" type="range" min="0" max="1" step="0.05" value="0.3">
+        </div>
+      </div>
+
+      <!-- Profiles Tab -->
+      <div class="settings-pane" data-pane="profiles">
+        <div class="profile-list" id="settings-profile-list"></div>
+        <textarea id="set-sys-prompt" class="settings-textarea" rows="8"
+          placeholder="Custom system prompt for selected profile..."></textarea>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button id="btn-settings-save" class="btn-primary">Save</button>
+    </div>
+  </div>
+</div>
+
 <script defer src="/static/js/setup_wizard.js"></script>
 <script defer src="/static/js/updater_ui.js"></script>
 <script defer src="/static/js/app.js"></script>
