@@ -42,11 +42,10 @@ Declared values (must be multiples of 4):
 | 3xl | 64px | Not used in Finance panel |
 
 Exceptions:
-- Transaction list rows: 9px top/bottom padding (established pattern from `.sess-item` at 9px 8px — not on 8-point grid but matches existing codebase rhythm, keep consistent)
 - Bar chart track height: 8px (established from research Pattern 5)
 - Touch targets on tab buttons: minimum 44px height for accessibility
 
-**Source:** Spacing derived from existing `app.css` patterns (sessions list 9px 8px, RSB section 11px 10px, modal 16px 18px). 8-point grid applied for new Finance-specific elements.
+**Source:** Spacing derived from existing `app.css` patterns (modal 16px 18px, RSB section padding). 8-point grid applied for all Finance-specific elements including transaction list rows.
 
 ---
 
@@ -55,13 +54,15 @@ Exceptions:
 | Role | Size | Weight | Line Height | Usage |
 |------|------|--------|-------------|-------|
 | Body | 15px | 400 | 1.5 | Chat messages in Finance Chat tab (matches `.msg-text` at 15px/1.5 in app.css) |
-| Label | 12px | 600 | 1.4 | Section headers, category names, tab labels, column headers in transaction list |
-| Data | 14px | 500 | 1.3 | Transaction descriptions, period selector, dashboard metric labels |
+| Label | 12px | 600 | 1.4 | Section headers, category names, tab labels, column headers in transaction list, category badge text, period label in trend row, date column in transaction list, reset button text |
+| Data | 14px | 500 | 1.3 | Transaction descriptions, period selector, upload CTA text, amount column, budget row labels |
 | Display | 24px | 700 | 1.0 | Total spend figures, key dashboard numbers (matches `.rsb-scard-val` display pattern) |
 
 Weights declared: 400 (body/data) and 600 (labels/headings). Weight 700 reserved for display numbers only (not a third weight — matches existing 700 usage in `.rsb-scard-val`).
 
-Mono font (JetBrains Mono, size 12px) used only for: period label badge in upload list.
+Mono font (JetBrains Mono, size 12px) used only for: date column in transaction list (label role, same scale).
+
+**Consolidation note (revision):** Original spec used 7 sizes (10px, 11px, 12px, 13px, 14px, 15px, 24px). Consolidated to 4 by mapping: 10px → 12px (label role), 11px → 12px (label role), 13px → 14px (data role). All Component Inventory references updated accordingly.
 
 **Source:** UIUX/DESIGN.md specifies Inter at 400/500/600. app.css confirms 15px/1.5 for message body, 12px/600 for section labels, 24px/700 for stat display values.
 
@@ -115,7 +116,7 @@ All new Finance components use the `.fin-` prefix. No existing class names are m
 
 ### Period Selector (`.fin-period-select`)
 
-- Dropdown `<select>` styled to match existing modal inputs: `background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--r-sm); padding: 6px 12px; font-size: 13px; color: var(--text-primary)`
+- Dropdown `<select>` styled to match existing modal inputs: `background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--r-sm); padding: 6px 12px; font-size: 14px; color: var(--text-primary)`
 - Positioned at top-right of Dashboard pane header row
 - Options: all uploaded `period_label` values + "All time" (default/first option)
 
@@ -139,24 +140,24 @@ All new Finance components use the `.fin-` prefix. No existing class names are m
 
 - One row per `period_label`, ordered by MIN(date) ascending
 - Horizontal bar, same track/fill pattern as category bars but height 6px
-- Period label: 11px `var(--text-muted)`, fixed-width left column 80px
+- Period label: 12px `var(--text-muted)`, fixed-width left column 80px
 - Total spend: 12px `var(--text-primary)`, right-aligned
 
 ### Transaction List (`.fin-tx-list`)
 
 - Ghost scrollbar: extend existing selector in app.css to include `.fin-tx-list:hover ::-webkit-scrollbar-thumb`
-- Row height: `min-height: 40px`, `padding: 9px 16px` (matches `.sess-item` rhythm)
+- Row height: `min-height: 40px`, `padding: 8px 16px`
 - Alternating row tint: even rows `background: rgba(255,255,255,0.02)`
-- Columns: Date (80px, 11px mono), Description (flex 1, 13px), Amount (72px right-align, 13px tabular-nums), Category badge, Type indicator
-- Credit rows: Amount text color `#6ee7b7`, "↑ Credit" badge at 10px weight 500
+- Columns: Date (80px, 12px mono), Description (flex 1, 14px), Amount (72px right-align, 14px tabular-nums), Category badge, Type indicator
+- Credit rows: Amount text color `#6ee7b7`, "↑ Credit" badge at 12px weight 500
 - Debit rows: Amount text color `var(--text-primary)`
-- Category badge: `background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--r-sm); padding: 2px 6px; font-size: 10px; color: var(--text-muted)`
+- Category badge: `background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--r-sm); padding: 2px 6px; font-size: 12px; color: var(--text-muted)`
 
 ### CSV Upload UI (`.fin-upload-area`)
 
 - Dropzone or button: glass card style (`var(--card-bg)`, `1px solid var(--card-border)`, `border-radius: var(--r-md)`)
 - Period label text input: below file selector, placeholder "e.g. Jan 2026", same styling as settings inputs
-- "Upload CSV" primary CTA button: `background: var(--accent-primary); color: #fff; border-radius: var(--r-pill); padding: 8px 20px; font-size: 13px; font-weight: 600`
+- "Upload CSV" primary CTA button: `background: var(--accent-primary); color: #fff; border-radius: var(--r-pill); padding: 8px 20px; font-size: 14px; font-weight: 600`
 - Upload progress: if file is large, show inline text status ("Parsing 120 rows...") — SSE optional for Phase 2, inline status acceptable
 - Success state: "120 rows added, 0 duplicates skipped" in `var(--text-secondary)` below button
 - Upload list: compact rows showing filename, period label, account type, row count — same `.fin-tx-list` row styling
@@ -165,7 +166,7 @@ All new Finance components use the `.fin-` prefix. No existing class names are m
 
 - Chat-style panel inside Finance panel when `onboarding_done = false`
 - Reuses `buildMessageHTML` / `appendMessage` rendering pipeline (from CONTEXT.md and RESEARCH.md)
-- "Skip" button: top-right corner of panel, text link style, 13px `var(--text-muted)`, hover → `var(--accent-primary)`
+- "Skip" button: top-right corner of panel, text link style, 14px `var(--text-muted)`, hover → `var(--accent-primary)`
 - Budget input card (step 3): inline form card inside chat area — glass card (`var(--card-bg)`, `var(--r-md)`), 2-column grid of labeled number inputs, one per category, submit button at bottom
 - Progress indicator: none (conversational, no step dots)
 
@@ -183,7 +184,7 @@ All new Finance components use the `.fin-` prefix. No existing class names are m
 - Open: `financeUI.open()` removes `.hidden`, triggers `_checkOnboarding()`
 - Close: `financeUI.close()` adds `.hidden`
 - ESC key closes Finance panel (add keydown listener on open, remove on close)
-- "Reset goals" button: inside Dashboard pane header, 11px text, `var(--text-muted)` color, no background — matches existing ghost button pattern
+- "Reset goals" button: inside Dashboard pane header, 12px text, `var(--text-muted)` color, no background — matches existing ghost button pattern
 
 ### Tab Switching
 - Click tab → remove `.active` from current pane and tab, add to target
@@ -266,7 +267,9 @@ No external component registries. All components are hand-coded CSS/HTML followi
 | No-budget ghost prompt | CONTEXT.md "No-budget state" decision |
 | Transaction list credits (green "↑ Credit" tag) | CONTEXT.md dashboard decisions |
 | Finance chat separate history | RESEARCH.md Anti-Patterns section |
-| Spacing scale | app.css existing patterns (.sess-item 9px, modal 16px 18px, rsb 11px 10px) |
+| Spacing scale | app.css existing patterns (modal 16px 18px, RSB section padding) — 8px used for transaction rows (on-grid) |
+| Typography consolidation (4 sizes) | Revision: 10px/11px → 12px (label), 13px → 14px (data) — checker issue 1 fix |
+| Transaction row padding 8px | Revision: 9px → 8px (sm token, on-grid) — checker issue 2 fix |
 
 ---
 
