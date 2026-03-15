@@ -450,6 +450,7 @@ async def save_goals(
     """Persist the user's financial goals from onboarding.
 
     Accepts JSON body: {goal_type, life_events, budgets, horizon}
+    Replaces any existing goals row (only one row kept at a time).
     Sets app_settings.fin_onboarding_done = 'true'.
     """
     goal_type = payload.get("goal_type", "")
@@ -461,6 +462,8 @@ async def save_goals(
     conn = database._connect_db()
     c = conn.cursor()
     try:
+        # Replace strategy: only one goals row at a time
+        c.execute("DELETE FROM fin_goals")
         c.execute(
             """INSERT INTO fin_goals (goal_type, life_events, budgets, horizon, created_at)
                VALUES (?, ?, ?, ?, ?)""",
@@ -472,6 +475,182 @@ async def save_goals(
 
     database.set_app_setting("fin_onboarding_done", "true")
     return {"ok": True, "status": "saved"}
+
+
+@router.get("/goals")
+async def get_goals(request: Request) -> Dict[str, Any]:
+    """Return the latest saved financial goals, or {goals: null} if none."""
+    conn = database._connect_db()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT * FROM fin_goals ORDER BY id DESC LIMIT 1")
+        row = c.fetchone()
+    finally:
+        conn.close()
+
+    if row is None:
+        return {"goals": None}
+
+    # row: (id, goal_type, life_events, budgets, horizon, created_at)
+    col_names = ["id", "goal_type", "life_events", "budgets", "horizon", "created_at"]
+    goals = dict(zip(col_names, row))
+    goals["life_events"] = json.loads(goals["life_events"] or "[]")
+    goals["budgets"] = json.loads(goals["budgets"] or "{}")
+    return {"goals": goals}
+
+
+# ---------------------------------------------------------------------------
+# Dashboard aggregation endpoint
+# ---------------------------------------------------------------------------
+
+
+def _run_dashboard_queries(conn, period: str) -> Dict[str, Any]:
+    """Run the four SQL aggregation queries and return dashboard JSON payload.
+
+    Args:
+        conn: open sqlite3.Connection
+        period: period label string, or "All time" for all periods
+
+    Returns:
+        dict with keys: categories, budget_actual, trend, transactions, has_goals, total_spend
+    """
+    c = conn.cursor()
+    period_filter = period if period != "All time" else None
+
+    # 1. Category breakdown (debits only)
+    if period_filter:
+        c.execute(
+            """SELECT category, SUM(amount) as total, COUNT(*) as count
+               FROM fin_transactions
+               WHERE type = 'debit' AND period_label = ?
+               GROUP BY category
+               ORDER BY total DESC""",
+            (period_filter,),
+        )
+    else:
+        c.execute(
+            """SELECT category, SUM(amount) as total, COUNT(*) as count
+               FROM fin_transactions
+               WHERE type = 'debit'
+               GROUP BY category
+               ORDER BY total DESC"""
+        )
+    cat_rows = c.fetchall()
+
+    grand_total = sum(r[1] for r in cat_rows) or 1.0  # avoid division by zero
+    categories = [
+        {
+            "category": r[0],
+            "total": round(r[1], 2),
+            "count": r[2],
+            "pct": round(r[1] / grand_total * 100, 1),
+        }
+        for r in cat_rows
+    ]
+
+    # 2. Monthly trend (all periods, debits only — not filtered by period)
+    c.execute(
+        """SELECT period_label, SUM(amount) as total_spend, COUNT(*) as tx_count
+           FROM fin_transactions
+           WHERE type = 'debit'
+           GROUP BY period_label
+           ORDER BY MIN(date) ASC"""
+    )
+    trend = [
+        {"period_label": r[0], "total_spend": round(r[1], 2), "tx_count": r[2]}
+        for r in c.fetchall()
+    ]
+
+    # 3. Transaction list (500 most recent, filtered by period)
+    if period_filter:
+        c.execute(
+            """SELECT date, description, amount, type, category, account_type
+               FROM fin_transactions
+               WHERE period_label = ?
+               ORDER BY date DESC
+               LIMIT 500""",
+            (period_filter,),
+        )
+    else:
+        c.execute(
+            """SELECT date, description, amount, type, category, account_type
+               FROM fin_transactions
+               ORDER BY date DESC
+               LIMIT 500"""
+        )
+    transactions = [
+        {
+            "date": r[0],
+            "description": r[1],
+            "amount": round(r[2], 2),
+            "type": r[3],
+            "category": r[4],
+            "account_type": r[5],
+        }
+        for r in c.fetchall()
+    ]
+
+    # 4. Budget vs actual — join goals budgets JSON with category totals
+    c.execute("SELECT budgets FROM fin_goals ORDER BY id DESC LIMIT 1")
+    goals_row = c.fetchone()
+    has_goals = goals_row is not None
+
+    budget_actual: List[Dict[str, Any]] = []
+    if has_goals:
+        try:
+            budgets_dict: Dict[str, float] = json.loads(goals_row[0] or "{}")
+        except (json.JSONDecodeError, TypeError):
+            budgets_dict = {}
+
+        # Build a lookup from category totals
+        actuals_by_cat = {r["category"]: r["total"] for r in categories}
+
+        # Include all categories that have either a budget or actual spend
+        all_cats = set(budgets_dict.keys()) | set(actuals_by_cat.keys())
+        for cat in sorted(all_cats):
+            budget_actual.append({
+                "category": cat,
+                "actual": actuals_by_cat.get(cat, 0.0),
+                "budget": float(budgets_dict.get(cat, 0)),
+            })
+
+    total_spend = sum(r[1] for r in cat_rows)
+
+    return {
+        "categories": categories,
+        "budget_actual": budget_actual,
+        "trend": trend,
+        "transactions": transactions,
+        "has_goals": has_goals,
+        "total_spend": round(total_spend, 2),
+    }
+
+
+@router.get("/dashboard_data")
+async def dashboard_data(request: Request, period: str = "All time") -> Dict[str, Any]:
+    """Return aggregated dashboard data for the Finance panel.
+
+    Query params:
+        period: period label string, or "All time" (default) for all periods
+
+    Returns JSON with keys:
+        categories, budget_actual, trend, transactions, has_goals, total_spend
+    """
+    conn = database._connect_db()
+    try:
+        return _run_dashboard_queries(conn, period)
+    finally:
+        conn.close()
+
+
+@router.get("/dashboard")
+async def dashboard(request: Request, period: str = "All time") -> Dict[str, Any]:
+    """Alias for /finance/dashboard_data — same response shape."""
+    conn = database._connect_db()
+    try:
+        return _run_dashboard_queries(conn, period)
+    finally:
+        conn.close()
 
 
 @router.post("/reset_goals")

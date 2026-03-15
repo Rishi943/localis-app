@@ -126,4 +126,4 @@ def test_multi_period_aggregation(client):
 
     # Combined debit total should cover both periods (at least the sum)
     total_spend = data.get("total_spend", data.get("totals", {}).get("debit", 0))
-    assert total_spend >= pytest.approx(5.75 + 18.50 + 15.99 + 42.99)
+    assert total_spend >= (5.75 + 18.50 + 15.99 + 42.99) - 0.01

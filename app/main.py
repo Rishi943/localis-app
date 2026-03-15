@@ -1932,6 +1932,7 @@ async def get_api_settings():
         "context_size",
         "active_profile",
         "custom_profile_prompt",
+        "fin_onboarding_done",
     ]
     result = {}
     for key in keys:
