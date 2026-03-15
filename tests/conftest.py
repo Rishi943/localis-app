@@ -126,7 +126,11 @@ def client():
     """
     FastAPI TestClient wrapping the main app.
     llama_cpp is stubbed out so no model file is needed.
+
+    Uses a context manager so the startup event fires and init_db() runs,
+    creating all tables including fin_* tables before any test runs.
     """
     from fastapi.testclient import TestClient
     import app.main as main_module
-    return TestClient(main_module.app, raise_server_exceptions=False)
+    with TestClient(main_module.app, raise_server_exceptions=False) as test_client:
+        yield test_client

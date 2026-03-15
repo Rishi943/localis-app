@@ -60,6 +60,7 @@ from .rag import register_rag
 from .assist import register_assist
 from .voice import register_voice
 from .wakeword import register_wakeword
+from .finance import register_finance
 
 
 # ------------------------------
@@ -286,6 +287,7 @@ register_rag(app, DATA_DIR)
 register_assist(app, MODELS_DIR, DEBUG)
 register_voice(app, DATA_DIR)
 register_wakeword(app, DATA_DIR)
+register_finance(app, str(database.DB_NAME))
 
 
 
