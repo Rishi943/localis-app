@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Phase 1 context gathered
-last_updated: "2026-03-15T01:04:12.814Z"
+stopped_at: Completed 01-ui-polish/01-02-PLAN.md
+last_updated: "2026-03-15T10:25:22.694Z"
 last_activity: 2026-03-14 — Roadmap created; 25 v1 requirements mapped across 6 phases
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 6
+  completed_plans: 1
   percent: 0
 ---
 
@@ -50,6 +50,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 01-ui-polish P02 | 2 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -61,6 +62,8 @@ Recent decisions affecting current work:
 - Post+ soft-warn at <5 examples (not blocking — educates on quality trade-off)
 - YouTube Music via HA media_player (user owns HA entity setup — out of scope for Localis)
 - All UI changes must conform to UIUX/DESIGN.md (Midnight Glass identity)
+- [Phase 01-ui-polish]: toggleSettings() must use .collapsed (not .visible) — .rsb.visible has no CSS rule
+- [Phase 01-ui-polish]: Auto-scroll must target #chat-zone (overflow-y: auto), not #chat-history (inner non-scrollable div)
 
 ### Pending Todos
 
@@ -74,6 +77,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-15T01:04:12.810Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-ui-polish/01-CONTEXT.md
+Last session: 2026-03-15T10:25:22.692Z
+Stopped at: Completed 01-ui-polish/01-02-PLAN.md
+Resume file: None

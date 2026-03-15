@@ -10,8 +10,8 @@ Requirements for the active feature build cycle. Adds to the existing shipped ba
 ### UI Polish
 
 - [ ] **UI-01**: User sees consistent layout and spacing across all panels (padding, margins, alignment)
-- [ ] **UI-02**: User can navigate between sections via left rail icons; left and right sidebars collapse and expand correctly
-- [ ] **UI-03**: Chat interface presents messages cleanly — bubbles, input bar pill, streaming display without end-pop, smooth scroll behaviour
+- [x] **UI-02**: User can navigate between sections via left rail icons; left and right sidebars collapse and expand correctly
+- [x] **UI-03**: Chat interface presents messages cleanly — bubbles, input bar pill, streaming display without end-pop, smooth scroll behaviour
 - [ ] **UI-04**: All components share visual cohesion — glass effects, border consistency, and typography hierarchy match UIUX/DESIGN.md
 
 ### LAB (Model Parameter Playground)
@@ -100,8 +100,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | UI-01 | Phase 1 | Pending |
-| UI-02 | Phase 1 | Pending |
-| UI-03 | Phase 1 | Pending |
+| UI-02 | Phase 1 | Complete |
+| UI-03 | Phase 1 | Complete |
 | UI-04 | Phase 1 | Pending |
 | LAB-01 | Phase 2 | Pending |
 | LAB-02 | Phase 2 | Pending |
