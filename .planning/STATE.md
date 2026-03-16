@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 02-financial-advisor/02-05-PLAN.md
-last_updated: "2026-03-15T23:10:44.971Z"
+stopped_at: Completed 02-financial-advisor/02-06-PLAN.md
+last_updated: "2026-03-16T02:22:35.835Z"
 last_activity: 2026-03-14 — Roadmap created; 25 v1 requirements mapped across 6 phases
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 13
-  completed_plans: 11
+  completed_plans: 12
   percent: 0
 ---
 
@@ -95,6 +95,7 @@ Recent decisions affecting current work:
 - [Phase 02-financial-advisor]: fin_onboarding_done added to GET /api/settings key list so test_finance_onboarding.py can verify flag via settings endpoint
 - [Phase 02-financial-advisor]: requestAnimationFrame fires after innerHTML render to allow CSS transition on --pct property to animate bar fills
 - [Phase 02-financial-advisor]: Onboarding step machine advances by index — no NLP parsing of user replies; step determines which answer key to store
+- [Phase 02-financial-advisor]: current_model variable name used instead of llm (plan had wrong name) — matches actual app/finance.py module-level variable
 
 ### Pending Todos
 
@@ -108,6 +109,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-15T23:10:44.969Z
-Stopped at: Completed 02-financial-advisor/02-05-PLAN.md
+Last session: 2026-03-16T02:22:28.302Z
+Stopped at: Completed 02-financial-advisor/02-06-PLAN.md
 Resume file: None

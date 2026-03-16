@@ -116,7 +116,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. UI Polish | 6/6 | Complete | 2026-03-15 |
-| 2. Financial Advisor | 5/7 | In Progress|  |
+| 2. Financial Advisor | 6/7 | In Progress|  |
 | 3. LAB | 0/TBD | Not started | - |
 | 4. News RSS Feed | 0/TBD | Not started | - |
 | 5. YouTube Music via HA | 0/TBD | Not started | - |
