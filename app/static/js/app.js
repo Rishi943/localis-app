@@ -2093,6 +2093,12 @@ const financeUI = (function() {
 
         document.getElementById('fin-upload-confirm')?.addEventListener('click', _uploadCSV);
 
+        // Finance Chat tab send
+        document.getElementById('fin-chat-send')?.addEventListener('click', _sendFinanceChat);
+        document.getElementById('fin-chat-input')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _sendFinanceChat(); }
+        });
+
         // Keyboard: Escape closes panel
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && _open) close();
@@ -2143,7 +2149,101 @@ const financeUI = (function() {
         }
     }
 
-    return { open, close, init, _activateTab, _loadDashboard, _checkOnboarding };
+    // --- Finance Chat handler ---
+    let _finChatHistory = []; // in-memory only — NOT persisted to DB
+
+    async function _sendFinanceChat() {
+        const inputEl = document.getElementById('fin-chat-input');
+        const historyEl = document.getElementById('fin-chat-history');
+        if (!inputEl || !historyEl) return;
+
+        const message = inputEl.value.trim();
+        if (!message) return;
+        inputEl.value = '';
+
+        // Render user message
+        const userWrapper = document.createElement('div');
+        userWrapper.innerHTML = buildMessageHTML('user', message);
+        historyEl.appendChild(userWrapper);
+        historyEl.scrollTop = historyEl.scrollHeight;
+
+        // Add to in-memory history (for multi-turn context)
+        _finChatHistory.push({ role: 'user', content: message });
+
+        // Create assistant message placeholder
+        const assistWrapper = document.createElement('div');
+        assistWrapper.innerHTML = buildMessageHTML('assistant', '');
+        historyEl.appendChild(assistWrapper);
+        const assistContent = assistWrapper.querySelector('.msg-text, .message-content') || assistWrapper.lastElementChild;
+
+        let fullText = '';
+        let rafScheduled = false;
+
+        try {
+            const res = await fetch('/finance/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message,
+                    period: _currentPeriod,
+                    history: _finChatHistory.slice(-6), // last 3 turns for context
+                }),
+            });
+
+            if (res.status === 503) {
+                if (assistContent) assistContent.textContent = 'Finance chat requires the model to be loaded. Please load a model first.';
+                return;
+            }
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let streamBuffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                streamBuffer += decoder.decode(value, { stream: true });
+                const lines = streamBuffer.split('\n');
+                streamBuffer = lines.pop();
+
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    let data;
+                    try { data = JSON.parse(line.slice(6)); } catch(e) { continue; }
+
+                    if (data.token) {
+                        fullText += data.token;
+                        if (!rafScheduled && assistContent) {
+                            rafScheduled = true;
+                            requestAnimationFrame(() => {
+                                if (assistContent) assistContent.textContent = fullText;
+                                rafScheduled = false;
+                                historyEl.scrollTop = historyEl.scrollHeight;
+                            });
+                        }
+                    }
+
+                    if (data.done) {
+                        // Final markdown render
+                        if (assistWrapper) assistWrapper.innerHTML = buildMessageHTML('assistant', fullText);
+                        historyEl.scrollTop = historyEl.scrollHeight;
+                        // Add to in-memory history
+                        _finChatHistory.push({ role: 'assistant', content: fullText });
+                        break;
+                    }
+
+                    if (data.error) {
+                        if (assistContent) assistContent.textContent = 'Error: ' + data.error;
+                        break;
+                    }
+                }
+            }
+        } catch(e) {
+            if (assistContent) assistContent.textContent = 'Connection error: ' + e.message;
+        }
+    }
+
+    return { open, close, init, _activateTab, _loadDashboard, _checkOnboarding, _sendFinanceChat };
 })();
 
 FRT.els.text = document.getElementById('frt-text');
