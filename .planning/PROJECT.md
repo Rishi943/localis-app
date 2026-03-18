@@ -29,7 +29,7 @@ A local AI assistant that actually feels finished — polished enough that users
 - [ ] LAB — model parameter playground exposing temp, top_p, context size, GPU/CPU layers, repeat penalty; A/B defaults system for students and power users
 - [ ] News RSS Feed — aggregated feed from r/LocalLLaMA and user-configurable RSS sources; filterable, readable in-app
 - [ ] YouTube Music via HA — voice command "hey jarvis, play [song]" triggers HA media_player entity to play via YouTube Music integration
-- [ ] Financial Advisor — bank statement upload (CSV/OFX), categorised expense dashboard with pie charts, RAG-powered chat over statement data
+- ✓ Financial Advisor — V2 3-column dashboard with Chart.js charts, 8-category CSV upload, budget sidebar, onboarding flow, and finance chat — Validated in Phase 02: financial-advisor
 - [ ] Post+ (Reddit + LinkedIn) — writing style mimicry from user-provided examples; soft-warns when below minimum example count; separate profiles per platform (Reddit posts, LinkedIn posts)
 
 ### Out of Scope
@@ -70,4 +70,4 @@ Primary target user is Rishi (daily driver), with a secondary goal of making the
 | YouTube Music via HA media_player (user sets up entity) | Reuses existing HA integration; user owns the HA config | — Pending |
 
 ---
-*Last updated: 2026-03-14 after initialization*
+*Last updated: 2026-03-18 — Phase 02 (financial-advisor) complete*
