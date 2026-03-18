@@ -13,7 +13,7 @@ Localis is shipping six feature phases on top of an already-functional local AI 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: UI Polish** - Resolve layout/spacing/navigation inconsistencies so the app feels cohesive and demo-ready
-- [ ] **Phase 2: Financial Advisor** - Goal-oriented financial onboarding + CIBC CSV upload → SQLite → glass dashboard + LLM chat over spending data
+- [x] **Phase 2: Financial Advisor** - Goal-oriented financial onboarding + CIBC CSV upload → SQLite → glass dashboard + LLM chat over spending data (completed 2026-03-18)
 - [ ] **Phase 3: LAB** - Expose model inference parameters (temp, top_p, context size, GPU layers, repeat penalty) with DB persistence
 - [ ] **Phase 4: News RSS Feed** - Aggregated r/LocalLLaMA + custom RSS feed, filterable and readable in-app
 - [ ] **Phase 5: YouTube Music via HA** - Voice-command music playback and control routed through Home Assistant media_player
@@ -116,7 +116,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. UI Polish | 6/6 | Complete | 2026-03-15 |
-| 2. Financial Advisor | 0/7 | In Progress|  |
+| 2. Financial Advisor | 7/7 | Complete   | 2026-03-18 |
 | 3. LAB | 0/TBD | Not started | - |
 | 4. News RSS Feed | 0/TBD | Not started | - |
 | 5. YouTube Music via HA | 0/TBD | Not started | - |

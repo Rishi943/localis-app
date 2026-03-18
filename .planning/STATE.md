@@ -2,16 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Phase 2 V2 context updated — ready for replanning
-last_updated: "2026-03-18T16:00:23.517Z"
-last_activity: 2026-03-14 — Roadmap created; 25 v1 requirements mapped across 6 phases
+status: unknown
+stopped_at: Completed 02-07-PLAN.md — V2 schema gap closure complete
+last_updated: "2026-03-18T21:50:20.260Z"
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 13
-  completed_plans: 12
-  percent: 0
+  completed_plans: 13
 ---
 
 # Project State
@@ -21,20 +19,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** A local AI assistant that feels finished — polished, private, and powerful enough to prefer over ChatGPT
-**Current focus:** Phase 1 — UI Polish
+**Current focus:** Phase 02 — financial-advisor
 
 ## Current Position
 
-Phase: 1 of 6 (UI Polish)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-03-14 — Roadmap created; 25 v1 requirements mapped across 6 phases
-
-Progress: [░░░░░░░░░░] 0%
+Phase: 02 (financial-advisor) — EXECUTING
+Plan: 1 of 7
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0
 - Average duration: —
 - Total execution time: 0 hours
@@ -46,6 +41,7 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 **Recent Trend:**
+
 - Last 5 plans: —
 - Trend: —
 
@@ -60,6 +56,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02-financial-advisor P02 | 5 | 2 tasks | 4 files |
 | Phase 02-financial-advisor P04 | 15 | 2 tasks | 4 files |
 | Phase 02-financial-advisor P05 | 2 | 2 tasks | 2 files |
+| Phase 02-financial-advisor P07 | 25 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -96,6 +93,9 @@ Recent decisions affecting current work:
 - [Phase 02-financial-advisor]: requestAnimationFrame fires after innerHTML render to allow CSS transition on --pct property to animate bar fills
 - [Phase 02-financial-advisor]: Onboarding step machine advances by index — no NLP parsing of user replies; step determines which answer key to store
 - [Phase 02-financial-advisor]: current_model variable name used instead of llm (plan had wrong name) — matches actual app/finance.py module-level variable
+- [Phase 02-financial-advisor]: fin_tables DROP+recreate on every init_db() startup to migrate V1 to V2 schema — data loss acceptable since finance data is user-uploaded CSV
+- [Phase 02-financial-advisor]: CATEGORY_RULES includes 'Other': [] as explicit 8th key so JS budget renderer can iterate all 8 categories; categorise() fallback logic unchanged
+- [Phase 02-financial-advisor]: V2 period filtering always uses strftime('%Y-%m', date) = ? not stored period_label column — periods derived from transaction dates not upload metadata
 
 ### Pending Todos
 
@@ -109,6 +109,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-18T16:00:23.515Z
-Stopped at: Phase 2 V2 context updated — ready for replanning
-Resume file: .planning/phases/02-financial-advisor/02-CONTEXT.md
+Last session: 2026-03-18T21:50:20.258Z
+Stopped at: Completed 02-07-PLAN.md — V2 schema gap closure complete
+Resume file: None
