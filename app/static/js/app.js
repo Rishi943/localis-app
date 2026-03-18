@@ -1791,7 +1791,8 @@ const financeUI = (function() {
             }
 
             renderCategories(data.categories);
-            renderBudgetActual(data.categories, data.budgets);
+            renderBudgetActual(data.categories, data.budgets);   // existing — targets hidden div
+            renderBudgetSidebar(data.categories, data.budgets);  // NEW — targets sidebar
             renderTrend(data.trend);
             renderTransactions(data.transactions);
             renderLineChart(data.trend);        // Chart.js line chart
@@ -1872,6 +1873,61 @@ const financeUI = (function() {
         }).filter(r => r).join('');
 
         container.innerHTML = rows || '<p class="fin-empty-hint">No spending data for this period.</p>';
+    }
+
+    function renderBudgetSidebar(categories, budgets) {
+        const container = document.getElementById('fin-budget-sidebar-rows');
+        if (!container) return;
+
+        const ALL_CATEGORIES = ['Food', 'Transport', 'Shopping', 'Utilities', 'Entertainment', 'Health & Fitness', 'Government & Fees', 'Other'];
+        const spendMap = {};
+        (categories || []).forEach(c => { spendMap[c.category] = c.total; });
+        budgets = budgets || {};
+
+        const rows = ALL_CATEGORIES.map(cat => {
+            const actual = spendMap[cat] || 0;
+            const budget = budgets[cat] || 0;
+            const hasBudget = budget > 0;
+            const pct = hasBudget ? Math.min((actual / budget) * 100, 100) : 0;
+
+            // Determine bar color class
+            let fillClass = 'fin-budget-fill';
+            if (hasBudget) {
+                if (actual > budget) fillClass += ' red';
+                else if (actual / budget >= 0.85) fillClass += ' amber';
+            }
+
+            const trackClass = hasBudget ? 'fin-budget-track' : 'fin-budget-track no-budget';
+            const amountText = hasBudget
+                ? `$${actual.toFixed(0)} / $${budget.toFixed(0)}`
+                : `$${actual.toFixed(0)}`;
+            const noBudgetLabel = hasBudget ? '' : '<span class="fin-budget-no-label">No budget</span>';
+
+            return `
+                <div class="fin-budget-row">
+                    <div class="fin-budget-row-header">
+                        <span class="fin-budget-cat-name">${cat}</span>
+                        <span class="fin-budget-cat-amounts">${amountText} ${noBudgetLabel}</span>
+                    </div>
+                    <div class="${trackClass}">
+                        <div class="${fillClass}" style="--pct:0"></div>
+                    </div>
+                </div>`;
+        });
+
+        container.innerHTML = rows.join('');
+
+        // RAF: trigger CSS transitions after innerHTML renders
+        requestAnimationFrame(() => {
+            container.querySelectorAll('.fin-budget-fill').forEach((el, i) => {
+                const cat = ALL_CATEGORIES[i];
+                const actual = spendMap[cat] || 0;
+                const budget = budgets[cat] || 0;
+                const hasBudget = budget > 0;
+                const pct = hasBudget ? Math.min((actual / budget) * 100, 100) : 0;
+                el.style.setProperty('--pct', pct);
+            });
+        });
     }
 
     function renderTrend(trend) {
@@ -2087,7 +2143,7 @@ const financeUI = (function() {
         const skipBtn = document.getElementById('fin-onboarding-skip');
         if (!historyEl || !inputEl) { _onboardingStarted = false; return; }
 
-        const CATEGORIES = ['Food', 'Transport', 'Shopping', 'Utilities', 'Entertainment', 'Other'];
+        const CATEGORIES = ['Food', 'Transport', 'Shopping', 'Utilities', 'Entertainment', 'Health & Fitness', 'Government & Fees', 'Other'];
         const STEPS = [
             {
                 prompt: "Hey there! I'm here to help you understand your spending. First — what are you mainly saving toward? Feel free to say something like \"saving more each month\", \"planning for a vacation\", \"building an emergency fund\", or anything else on your mind.",
@@ -2266,6 +2322,18 @@ const financeUI = (function() {
         document.getElementById('fin-period-select')?.addEventListener('change', (e) => {
             _currentPeriod = e.target.value;
             _loadDashboard(_currentPeriod);
+        });
+
+        // Refresh button
+        document.getElementById('fin-refresh-btn')?.addEventListener('click', async () => {
+            const btn = document.getElementById('fin-refresh-btn');
+            if (btn) btn.classList.add('spinning');
+            try {
+                await _loadPeriods();
+                await _loadDashboard(_currentPeriod);
+            } finally {
+                if (btn) btn.classList.remove('spinning');
+            }
         });
 
         // CSV upload trigger
