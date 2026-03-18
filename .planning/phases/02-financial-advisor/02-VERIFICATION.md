@@ -1,6 +1,6 @@
 ---
 phase: 02-financial-advisor
-verified: 2026-03-18T22:30:00Z
+verified: 2026-03-18T23:00:00Z
 status: passed
 score: 14/14 must-haves verified
 re_verification: true
@@ -23,15 +23,25 @@ gaps_closed:
   - "JS renderTrend reads V2 {period, total} keys"
 gaps_remaining: []
 regressions: []
+post_plan_02_10_verification:
+  - "HTML/CSS V2 skeleton from plan 02-08 verified: fin-dashboard-body, fin-budget-sidebar, fin-center, canvas elements all present"
+  - "Chart.js v4 UMD bundle from plan 02-10: 201KB bundle loaded, renderLineChart and renderDonutChart implemented and wired"
+  - "JS categories array updated to 8 entries with Health & Fitness and Government & Fees present in 3 key locations"
+  - "renderBudgetSidebar function implemented and called from _loadDashboard, targeting #fin-budget-sidebar-rows"
+  - "Month grouping and source tags implemented in renderTransactions: fin-month-group, fin-tx-source-credit, fin-tx-source-bank all present"
+  - "No legacy V1 references detected: period_label, total_spend absent from JS and schema"
+  - "Upload flow FormData correctly appends account_label (not period_label)"
+  - "Dashboard response shape unchanged: {categories, trend, transactions, budgets}"
+  - "Onboarding flag lifecycle unchanged: init false → save_goals true → reset_goals false"
 ---
 
 # Phase 2: Financial Advisor Verification Report
 
 **Phase Goal:** Build a Financial Advisor feature that lets users upload bank CSV statements, categorize transactions, set budgets, and get AI-driven spending insights via natural language chat
 
-**Verified:** 2026-03-18T22:30:00Z
+**Verified:** 2026-03-18T23:00:00Z
 **Status:** passed
-**Re-verification:** Yes — after gap closure by plan 02-07
+**Re-verification:** Yes — after gap closure by plan 02-07, and regression check after plans 02-08, 02-09, 02-10
 
 ## Goal Achievement
 
@@ -39,24 +49,24 @@ regressions: []
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | fin_transactions uses account_label not period_label | ✓ VERIFIED | `CREATE TABLE fin_transactions ... account_label TEXT NOT NULL ... UNIQUE (date, description, amount, account_label)` in app/database.py |
-| 2 | fin_uploads uses account_label not period_label | ✓ VERIFIED | `CREATE TABLE fin_uploads ... account_label TEXT NOT NULL` in app/database.py |
-| 3 | 8 categories in CATEGORY_RULES including Health & Fitness and Government & Fees | ✓ VERIFIED | app/finance.py CATEGORY_RULES keys: Food, Transport, Shopping, Utilities, Entertainment, Health & Fitness, Government & Fees, Other |
-| 4 | Unique constraint on (date, description, amount, account_label) | ✓ VERIFIED | `UNIQUE (date, description, amount, account_label)` in fin_transactions CREATE TABLE, app/database.py |
-| 5 | GET /finance/periods returns YYYY-MM months from transaction dates | ✓ VERIFIED | `@router.get("/periods")` at line 463 queries `strftime('%Y-%m', date)` from fin_transactions, returns `{"periods": [...]}` |
-| 6 | GET /finance/accounts returns distinct account_label values | ✓ VERIFIED | `@router.get("/accounts")` at line 480 queries `DISTINCT account_label` from fin_uploads, returns `{"accounts": [...]}` |
-| 7 | GET /finance/dashboard_data returns {categories, trend, transactions, budgets} | ✓ VERIFIED | `@router.get("/dashboard_data")` at line 656 returns exact dict shape with all 4 keys, no V1 artifacts (no budget_actual, has_goals) |
-| 8 | POST /finance/upload_csv accepts account_label form field | ✓ VERIFIED | upload_csv signature at line 326-329: `account_label: str = Form(...)`, not period_label |
-| 9 | fin_onboarding_done resets to false on V2 first-run | ✓ VERIFIED | `set_app_setting('fin_onboarding_done', 'false')` in app/database.py init_db() after DROP TABLE statements |
-| 10 | POST /finance/goals sets fin_onboarding_done=true after persisting budgets | ✓ VERIFIED | Line 533 in app/finance.py: `database.set_app_setting("fin_onboarding_done", "true")` inside save_goals endpoint |
-| 11 | POST /finance/reset_goals sets fin_onboarding_done=false | ✓ VERIFIED | Line 694 in app/finance.py: `database.set_app_setting("fin_onboarding_done", "false")` inside reset_goals endpoint |
-| 12 | POST /finance/chat reads period from request body and passes to build_finance_context | ✓ VERIFIED | Line 857 in app/finance.py: `period = str(body.get("period", "All time")).strip()`, line 863: `fin_context = build_finance_context(period)` |
-| 13 | app.js upload flow sends account_label in FormData | ✓ VERIFIED | Line 2153 in app/static/js/app.js: `formData.append('account_label', accountLabel)` — no period_label references in active code |
-| 14 | app.js renderTrend reads V2 {period, total} keys | ✓ VERIFIED | Line 1871 reads `t.total`, line 1875 reads `t.period` for month label formatting — no t.period_label or t.total_spend |
+| 1 | fin_transactions uses account_label not period_label | ✓ VERIFIED | `CREATE TABLE ... account_label TEXT NOT NULL ...` in app/database.py |
+| 2 | fin_uploads uses account_label not period_label | ✓ VERIFIED | `CREATE TABLE ... account_label TEXT NOT NULL` in app/database.py |
+| 3 | 8 categories in CATEGORY_RULES including Health & Fitness and Government & Fees | ✓ VERIFIED | app/finance.py CATEGORY_RULES has all 8 keys |
+| 4 | Unique constraint on (date, description, amount, account_label) | ✓ VERIFIED | `UNIQUE (date, description, amount, account_label)` in fin_transactions |
+| 5 | GET /finance/periods returns YYYY-MM months from transaction dates | ✓ VERIFIED | `@router.get("/periods")` returns `{"periods": [...]}` |
+| 6 | GET /finance/accounts returns distinct account_label values | ✓ VERIFIED | `@router.get("/accounts")` returns `{"accounts": [...]}` |
+| 7 | GET /finance/dashboard_data returns {categories, trend, transactions, budgets} | ✓ VERIFIED | Returns exact dict shape with all 4 keys |
+| 8 | POST /finance/upload_csv accepts account_label form field | ✓ VERIFIED | `account_label: str = Form(...)` in upload_csv |
+| 9 | fin_onboarding_done resets to false on V2 first-run | ✓ VERIFIED | `set_app_setting('fin_onboarding_done', 'false')` in init_db() |
+| 10 | POST /finance/goals sets fin_onboarding_done=true after persisting budgets | ✓ VERIFIED | Line in save_goals: `set_app_setting("fin_onboarding_done", "true")` |
+| 11 | POST /finance/reset_goals sets fin_onboarding_done=false | ✓ VERIFIED | Line in reset_goals: `set_app_setting("fin_onboarding_done", "false")` |
+| 12 | POST /finance/chat reads period from request body and passes to build_finance_context | ✓ VERIFIED | `period = str(body.get("period", "All time"))` in finance_chat |
+| 13 | app.js upload flow sends account_label in FormData | ✓ VERIFIED | `formData.append('account_label', accountLabel)` in upload handler |
+| 14 | app.js renderLineChart reads V2 {period, total} keys | ✓ VERIFIED | `t.period` (line 1971) and `t.total` (line 1975) used in renderLineChart |
 
 **Score:** 14/14 must-haves verified
 
-### Backend Schema Verification (V2)
+### Backend Schema Verification (V2 Confirmed)
 
 | Component | Check | Result |
 |-----------|-------|--------|
@@ -75,44 +85,75 @@ regressions: []
 |----------|--------|--------|---------|
 | /finance/periods | GET | ✓ WIRED | Returns `{"periods": [...]}` with YYYY-MM derived from dates |
 | /finance/accounts | GET | ✓ WIRED | Returns `{"accounts": [...]}` with distinct account_label values |
-| /finance/dashboard_data | GET | ✓ WIRED | Returns `{categories, trend, transactions, budgets}` shape with strftime date filtering |
-| /finance/upload_csv | POST | ✓ WIRED | Accepts `account_label` form field, inserts to fin_uploads/fin_transactions with account_label |
+| /finance/dashboard_data | GET | ✓ WIRED | Returns `{categories, trend, transactions, budgets}` shape |
+| /finance/upload_csv | POST | ✓ WIRED | Accepts `account_label` form field, inserts with account_label |
 | /finance/goals | POST | ✓ WIRED | Persists budgets, sets fin_onboarding_done=true |
 | /finance/reset_goals | POST | ✓ WIRED | Clears goals, sets fin_onboarding_done=false |
-| /finance/chat | POST | ✓ WIRED | Reads period from request body, calls build_finance_context(period), streams LLM response with financial context |
+| /finance/chat | POST | ✓ WIRED | Reads period from body, builds finance context, streams LLM |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|----|--------|---------|
-| app.js upload handler | /finance/upload_csv | FormData with account_label | ✓ WIRED | Line 2153 appends account_label to FormData |
-| app.js _loadDashboard | /finance/dashboard_data | fetch with period parameter | ✓ WIRED | Calls `/finance/dashboard_data?period=${period}` and renders response |
-| app.js renderTrend | Dashboard trend data | Reads t.period, t.total | ✓ WIRED | Line 1871-1875 correctly destructure V2 trend object shape |
-| app.js renderBudgetActual | Dashboard categories + budgets | Reads from data.categories, data.budgets | ✓ WIRED | Budget bar chart uses V2 shape with 8 categories |
-| app/finance.py | app/database.py | Calls database._connect_db(), database.set_app_setting() | ✓ WIRED | All queries use database module correctly |
-| /finance/dashboard_data | fin_transactions | strftime date filtering | ✓ WIRED | All period queries use `strftime('%Y-%m', date) = ?` pattern |
+| app.js upload handler | /finance/upload_csv | FormData with account_label | ✓ WIRED | Line 2458 appends account_label |
+| app.js _loadDashboard | /finance/dashboard_data | fetch with period parameter | ✓ WIRED | Calls endpoint and renders response |
+| app.js renderLineChart | Dashboard trend data | Reads t.period, t.total | ✓ WIRED | Lines 1971, 1975 use V2 keys |
+| app/finance.py | app/database.py | Calls database module | ✓ WIRED | All queries use database connection correctly |
+| /finance/dashboard_data | fin_transactions | strftime date filtering | ✓ WIRED | All period queries use strftime pattern |
 
 ### Requirements Coverage
 
 | Requirement | Description | Status | Evidence |
 |-------------|-------------|--------|----------|
-| FIN-01 | Onboarding flow runs on first Finance panel open; user sets goals, budgets, horizon | ✓ SATISFIED | fin_onboarding_done flag lifecycle: reset to false on init, set to true after goals saved, set to false after reset |
-| FIN-02 | User can upload CIBC CSV, specify account label, transactions parsed to SQLite | ✓ SATISFIED | POST /finance/upload_csv accepts account_label form field, parses CSV rows, inserts to fin_transactions with account_label |
-| FIN-03 | Auto-categorise to 8 categories (Food, Transport, Shopping, Utilities, Entertainment, Health & Fitness, Government & Fees, Other) | ✓ SATISFIED | CATEGORY_RULES has all 8 keys with keyword lists; categorise() matches merchants and falls back to Other |
-| FIN-04 | Dashboard 3-column layout with glass CSS charts (donut, trend, transaction list) | ✓ SATISFIED | HTML/CSS/Chart.js exists in index.html and app.css; /finance/dashboard_data provides data for all visualizations |
-| FIN-05 | Multiple CSV uploads accumulate correctly; dedup logic prevents duplicates within same account | ✓ SATISFIED | UNIQUE constraint on (date, description, amount, account_label) prevents duplication; uploads accumulate across accounts via account_label grouping |
-| FIN-06 | Chat tab lets user ask natural language questions with SQL-generated context | ✓ SATISFIED | POST /finance/chat reads period from body, calls build_finance_context(period), injects plaintext context into LLM system prompt |
+| FIN-01 | Onboarding flow runs on first Finance panel open; user sets goals, budgets, horizon | ✓ SATISFIED | fin_onboarding_done flag lifecycle verified; init false → save_goals true |
+| FIN-02 | User can upload CIBC CSV, specify account label, transactions parsed to SQLite | ✓ SATISFIED | POST /finance/upload_csv accepts account_label, parses CSV, inserts to fin_transactions |
+| FIN-03 | Auto-categorise to 8 categories (Food, Transport, Shopping, Utilities, Entertainment, Health & Fitness, Government & Fees, Other) | ✓ SATISFIED | CATEGORY_RULES has all 8 keys; categorise() matches merchants |
+| FIN-04 | Dashboard 3-column layout with glass CSS charts (donut, trend, transaction list) | ✓ SATISFIED | HTML/CSS structure exists (plan 02-08); Chart.js charts implemented (plan 02-09); renderTransactions renders list (plan 02-10) |
+| FIN-05 | Multiple CSV uploads accumulate correctly; dedup logic prevents duplicates within same account | ✓ SATISFIED | UNIQUE constraint on (date, description, amount, account_label) prevents duplication |
+| FIN-06 | Chat tab lets user ask natural language questions with SQL-generated context | ✓ SATISFIED | POST /finance/chat reads period, calls build_finance_context, injects plaintext into LLM |
+
+### Post-Plan 02-10 Regression Scan
+
+**Plan 02-08: Finance Panel V2 HTML/CSS Skeleton**
+- ✓ `.fin-dashboard-body` (3-column flex container) present in index.html
+- ✓ `.fin-budget-sidebar` (240px left column) present
+- ✓ `.fin-center` (flex-1 center column) present
+- ✓ Canvas elements `#fin-line-chart` and `#fin-donut-chart` present
+- ✓ Backward-compat hidden divs kept for existing JS renderers
+- ✓ CSS includes `.fin-budget-fill`, `.fin-budget-track`, collapse rules, source tag pills
+
+**Plan 02-09: Chart.js Integration**
+- ✓ Chart.js v4.4.4 UMD bundle (201KB) exists at app/static/js/chart.umd.min.js
+- ✓ Script tag added to index.html before app.js
+- ✓ `renderLineChart(trendData)` implemented: reads t.period, t.total, renders blue line chart with glass tooltips
+- ✓ `renderDonutChart(categoryData)` implemented: 8-slot palette, percentage legend, empty-state handling
+- ✓ Both renderers wired into `_loadDashboard()` refresh cycle
+- ✓ Chart instances destroyed in `close()` to prevent memory leaks
+
+**Plan 02-10: Finance UI Gap Closure**
+- ✓ CATEGORIES array updated to 8 entries: added 'Health & Fitness', 'Government & Fees'
+- ✓ `renderBudgetSidebar()` function implemented: targets #fin-budget-sidebar-rows, shows all 8 categories
+- ✓ Refresh button (#fin-refresh-btn) wired to reload periods and dashboard
+- ✓ `renderTransactions()` rewritten: month grouping, collapsible headers, source tags (green bank / blue credit), credit amounts with ↑ prefix
+- ✓ Month groups sorted newest-first (descending)
+- ✓ Date formatting: `new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {...})`
+- ✓ Uses createElement/appendChild pattern to preserve event listeners
+
+**No Legacy References Detected**
+- ✓ `period_label` absent from index.html, app.css, app.js
+- ✓ `total_spend` absent from app.js and finance.py
+- ✓ All references to account_type use 'chequing' / 'credit_card' (not account_type field for dedup)
+- ✓ All trend data uses {period, total} shape (not {period_label, total_spend})
 
 ### Anti-Patterns Scan
 
 | File | Issue | Severity | Status |
 |------|-------|----------|--------|
 | app/database.py | No period_label in CREATE TABLE statements | Info | ✓ CLEAN |
-| app/finance.py | No period_label column references in SQL queries | Info | ✓ CLEAN |
 | app/finance.py | All queries use strftime date filtering | Info | ✓ CLEAN |
 | app/static/js/app.js | Upload sends account_label (not period_label) | Info | ✓ CLEAN |
-| app/static/js/app.js | renderTrend reads V2 keys (period, total) | Info | ✓ CLEAN |
-| app/templates/index.html | Input element id is fin-account-label-input | Info | ✓ CLEAN |
+| app/static/js/app.js | renderLineChart reads V2 keys (period, total) | Info | ✓ CLEAN |
+| app/templates/index.html | V2 skeleton complete with canvas elements | Info | ✓ CLEAN |
 
 ### Human Verification Required
 
@@ -128,20 +169,30 @@ The following require manual testing but cannot be verified programmatically:
    - **Expected:** Transactions auto-categorise to correct categories
    - **Why human:** Keyword matching requires realistic merchant names
 
-3. **Budget vs Actual Display**
-   - **Test:** After onboarding, set budget of $200 for Food; upload transactions totaling $150
-   - **Expected:** Budget bar shows 75% fill, green color; upload more to 250, bar shows red 125%
-   - **Why human:** Visual feedback and color transitions need human eye
+3. **3-Column Dashboard Layout Visual**
+   - **Test:** Open Finance panel after upload; verify layout shows left budget sidebar, center charts side-by-side, bottom transaction list
+   - **Expected:** All three regions visible and responsive; charts render correctly
+   - **Why human:** CSS layout and visual rendering
 
-4. **Finance Chat Context Accuracy**
+4. **Budget vs Actual Display and Color States**
+   - **Test:** Set budget of $200 for Food; upload transactions totaling $150, then $250
+   - **Expected:** Budget bar shows 75% fill (green); after second upload shows red 125%; colors transition smoothly
+   - **Why human:** Visual feedback and color transitions
+
+5. **Finance Chat Context Accuracy**
    - **Test:** Ask "How much did I spend on food last month?"; verify response includes correct SQL-aggregated amount
    - **Expected:** Chat response reflects dashboard data with correct period context
-   - **Why human:** LLM response quality and relevance assessment
+   - **Why human:** LLM response quality
 
-5. **Onboarding Flow Completion**
-   - **Test:** First open Finance panel; go through 5-step goal-setting questionnaire; verify saved to DB; reset and re-run onboarding
-   - **Expected:** Goals persist after save; flag resets properly; re-run is triggered on reset
+6. **Onboarding Flow Completion and Flag Reset**
+   - **Test:** First open Finance panel; go through 8-category budget questionnaire; verify saved to DB; click Reset Goals; verify re-run is triggered
+   - **Expected:** Goals persist after save; flag resets properly; re-run shows onboarding UI again
    - **Why human:** UI flow, form submission, flag state lifecycle
+
+7. **Month-Grouped Transactions Collapsible**
+   - **Test:** Upload multi-month CSV; verify each month group header is clickable; toggle collapse/expand arrows
+   - **Expected:** Month groups collapse and expand smoothly; transaction list shows newest months first
+   - **Why human:** UI interaction and animation
 
 ### Gap Closure Summary
 
@@ -151,12 +202,17 @@ The following require manual testing but cannot be verified programmatically:
 
 **Resolution (Plan 02-07):** Full V2 schema migration, 8-category expansion, endpoint implementation, goals flag management, and JS alignment.
 
-**Closure Evidence:**
-- Plan 02-07 executed 2026-03-18 with 2 tasks (database+finance.py, app.js)
-- 4 commits: 9583538 (schema + categories), bf5ae68 (docstring fix), d363094 (app.js), plus one additional
-- All 14 must-haves now verified in actual codebase
+**Final Closure (Plans 02-08, 02-09, 02-10):** HTML/CSS V2 skeleton, Chart.js integration, JS UI completion with 8 categories, budget sidebar, month-grouped transactions, source tags, and refresh button.
 
-**Status:** All gaps closed. Phase 2 goal achieved. Financial Advisor fully operational.
+**Status:** All gaps closed. Phase 2 goal achieved. Financial Advisor fully operational with:
+- ✓ V2 schema (account_label, 8 categories, dedup on composite key)
+- ✓ All 7 API endpoints (upload, periods, accounts, dashboard, goals, reset, chat)
+- ✓ Complete V2 UI skeleton (3-column layout, canvas elements, header actions)
+- ✓ Chart.js line + donut charts (locally bundled, responsive)
+- ✓ Month-grouped transaction list with source tags
+- ✓ Budget sidebar with all 8 categories
+- ✓ Onboarding flow with flag lifecycle
+- ✓ Finance chat with SQL-generated context
 
 ---
 
@@ -212,6 +268,9 @@ The following require manual testing but cannot be verified programmatically:
 | 8 categories enumerable for UI iteration | ✓ VERIFIED |
 | Deduplication logic uses correct column (account_label) | ✓ VERIFIED |
 | JS FormData matches backend field names (account_label) | ✓ VERIFIED |
+| V2 HTML/CSS skeleton complete with canvas elements | ✓ VERIFIED |
+| Chart.js v4 locally bundled and wired to renderers | ✓ VERIFIED |
+| Month grouping and source tags implemented in JS | ✓ VERIFIED |
 | No console errors in active code paths | ✓ VERIFIED |
 
 ---
@@ -230,10 +289,10 @@ The following require manual testing but cannot be verified programmatically:
 
 **All must-haves verified:** 14/14 core truths, 7/7 API endpoints, 6/6 requirements satisfied
 
-**Re-verification confirms:** Previous gaps completely closed by plan 02-07; no regressions detected.
+**Re-verification confirms:** Previous gaps completely closed by plan 02-07; plans 02-08, 02-09, 02-10 added UI completion without regressions; no breaking changes detected.
 
 ---
 
-_Verified: 2026-03-18T22:30:00Z_
+_Verified: 2026-03-18T23:00:00Z_
 _Verifier: Claude (gsd-verifier)_
-_Re-verification: Confirmed all 14 must-haves after gap closure by plan 02-07_
+_Final verification: Confirmed all 14 must-haves after plans 02-07 through 02-10; no regressions detected_
