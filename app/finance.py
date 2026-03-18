@@ -661,7 +661,7 @@ async def dashboard_data(request: Request, period: str = "All time") -> Dict[str
         period: period label string, or "All time" (default) for all periods
 
     Returns JSON with keys:
-        categories, budget_actual, trend, transactions, has_goals, total_spend
+        categories, trend, transactions, budgets
     """
     conn = database._connect_db()
     try:
