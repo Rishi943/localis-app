@@ -733,82 +733,101 @@
 <!-- FINANCE PANEL OVERLAY -->
 <div id="finance-panel" class="fin-panel hidden" role="dialog" aria-modal="true" aria-label="Financial Advisor">
 
-  <!-- Header with tabs and close -->
+  <!-- Header: tabs + right-side controls -->
   <div class="fin-header">
     <div class="fin-tabs" role="tablist">
       <button class="fin-tab active" data-tab="dashboard" role="tab" aria-selected="true">Dashboard</button>
       <button class="fin-tab" data-tab="chat" role="tab" aria-selected="false">Chat</button>
     </div>
     <div class="fin-header-actions">
+      <select id="fin-period-select" class="fin-period-select" title="Select period">
+        <option value="all">All time</option>
+      </select>
+      <button id="fin-refresh-btn" class="fin-icon-btn" title="Refresh">&#8635;</button>
+      <button id="fin-upload-btn" class="fin-upload-trigger-btn">
+        <svg width="14" height="14"><use href="#ico-upload"/></svg>
+        Upload CSV
+      </button>
       <button id="fin-reset-goals" class="fin-ghost-btn" title="Reset financial goals">Reset goals</button>
       <button id="fin-close" class="fin-close-btn" aria-label="Close Finance panel">&times;</button>
     </div>
   </div>
 
-  <!-- Dashboard pane (default) -->
+  <!-- Account label row (hidden until file selected) -->
+  <div id="fin-upload-period-row" class="fin-upload-period-row hidden">
+    <label class="fin-period-label">Account label:</label>
+    <input type="text" id="fin-account-label-input" class="fin-period-label-input"
+           placeholder="e.g. CIBC Chequing" list="fin-account-suggestions">
+    <datalist id="fin-account-suggestions"></datalist>
+    <button id="fin-upload-confirm" class="fin-confirm-btn">Upload</button>
+    <button id="fin-upload-cancel" class="fin-cancel-btn">Cancel</button>
+  </div>
+  <input type="file" id="fin-csv-input" accept=".csv" style="display:none">
+
+  <!-- Upload status message -->
+  <div id="fin-upload-status" class="fin-upload-status hidden"></div>
+
+  <!-- Dashboard pane -->
   <div id="fin-pane-dashboard" class="fin-pane active" role="tabpanel">
 
-    <!-- Period selector -->
-    <div class="fin-period-bar">
-      <label class="fin-period-label">Period:</label>
-      <select id="fin-period-select" class="fin-period-select">
-        <option value="all">All time</option>
-      </select>
-      <button id="fin-upload-btn" class="fin-upload-trigger-btn">
-        <svg width="14" height="14"><use href="#ico-upload"/></svg>
-        Upload CSV
-      </button>
-      <input type="file" id="fin-csv-input" accept=".csv" style="display:none">
-    </div>
+    <!-- 3-column body: left sidebar + center -->
+    <div class="fin-dashboard-body">
 
-    <!-- Upload account label input (hidden until file selected) -->
-    <div id="fin-upload-period-row" class="fin-upload-period-row hidden">
-      <label class="fin-period-label">Account label for this upload:</label>
-      <input type="text" id="fin-account-label-input" class="fin-period-label-input" placeholder="e.g. CIBC Chequing">
-      <button id="fin-upload-confirm" class="fin-confirm-btn">Upload</button>
-      <button id="fin-upload-cancel" class="fin-cancel-btn">Cancel</button>
-    </div>
-
-    <!-- Upload status message -->
-    <div id="fin-upload-status" class="fin-upload-status hidden"></div>
-
-    <!-- Charts container -->
-    <div class="fin-charts">
-
-      <!-- Empty state (shown when no uploads) -->
-      <div id="fin-empty-state" class="fin-empty-state">
-        <p class="fin-empty-msg">No transactions uploaded yet.</p>
-        <p class="fin-empty-hint">Upload a CIBC bank statement CSV to see your spending breakdown.</p>
+      <!-- LEFT SIDEBAR: Budget tracking -->
+      <div class="fin-budget-sidebar">
+        <div class="fin-budget-sidebar-header">
+          <span class="fin-sidebar-title">Budgets</span>
+        </div>
+        <div id="fin-budget-sidebar-rows">
+          <!-- Populated by renderBudgetSidebar() in plan 02-10 -->
+          <!-- Fallback content until JS runs -->
+          <p class="fin-empty-hint" style="padding-top:16px">Upload a CSV to see budget tracking.</p>
+        </div>
+        <!-- Keep old #fin-budget-chart for backward compat with existing renderBudgetActual() in app.js -->
+        <!-- Plan 02-10 will migrate to #fin-budget-sidebar-rows -->
+        <div id="fin-budget-chart" style="display:none"></div>
+        <button id="fin-set-budgets-hint" class="fin-ghost-btn hidden" style="margin-top:8px; font-size:11px">
+          Set up your goals to see budget tracking &rarr;
+        </button>
       </div>
 
-      <!-- Category breakdown chart -->
-      <section class="fin-chart-section" id="fin-sec-categories">
-        <h3 class="fin-chart-title">Spending by Category</h3>
-        <div id="fin-categories-chart" class="fin-categories-chart"></div>
-      </section>
+      <!-- CENTER COLUMN: charts + expense list -->
+      <div class="fin-center">
 
-      <!-- Budget vs actual chart -->
-      <section class="fin-chart-section" id="fin-sec-budget">
-        <h3 class="fin-chart-title">Budget vs Actual</h3>
-        <div id="fin-budget-chart" class="fin-budget-chart"></div>
-        <button id="fin-set-budgets-hint" class="fin-ghost-btn hidden">Set up your goals to see budget tracking &rarr;</button>
-      </section>
-
-      <!-- Monthly trend chart -->
-      <section class="fin-chart-section" id="fin-sec-trend">
-        <h3 class="fin-chart-title">Monthly Trend</h3>
-        <div id="fin-trend-chart" class="fin-trend-chart"></div>
-      </section>
-
-      <!-- Transaction list -->
-      <section class="fin-chart-section fin-tx-section" id="fin-sec-transactions">
-        <h3 class="fin-chart-title">Transactions</h3>
-        <div id="fin-tx-list" class="fin-tx-list">
-          <!-- Rows injected by JS -->
+        <!-- Empty state (shown when no uploads) -->
+        <div id="fin-empty-state" class="fin-empty-state hidden">
+          <p class="fin-empty-msg">No transactions yet</p>
+          <p class="fin-empty-hint">Upload a CIBC bank statement CSV to see your spending breakdown.</p>
         </div>
-      </section>
 
-    </div><!-- /fin-charts -->
+        <!-- Chart row: line chart left, donut chart right -->
+        <div class="fin-charts">
+          <div class="fin-line-chart-wrap">
+            <div class="fin-chart-label">MONTHLY SPEND</div>
+            <canvas id="fin-line-chart"></canvas>
+            <div class="fin-chart-empty-overlay hidden">No data yet — upload a statement to get started</div>
+            <!-- Legacy trend container kept for existing renderTrend() until 02-09 replaces it -->
+            <div id="fin-trend-chart" style="display:none"></div>
+          </div>
+          <div class="fin-donut-chart-wrap">
+            <div class="fin-chart-label">SPENDING BY CATEGORY</div>
+            <canvas id="fin-donut-chart"></canvas>
+            <div class="fin-chart-empty-overlay hidden">No data yet — upload a statement to get started</div>
+            <!-- Legacy categories container kept for existing renderCategories() until 02-09 replaces it -->
+            <div id="fin-categories-chart" style="display:none"></div>
+          </div>
+        </div>
+
+        <!-- Expenses list -->
+        <div class="fin-tx-pane">
+          <div id="fin-tx-list" class="fin-tx-list">
+            <!-- Month-grouped rows injected by renderTransactions() -->
+          </div>
+        </div>
+
+      </div><!-- /fin-center -->
+
+    </div><!-- /fin-dashboard-body -->
 
   </div><!-- /fin-pane-dashboard -->
 
@@ -823,7 +842,7 @@
     </div>
   </div>
 
-  <!-- Onboarding pane (shown on first open before goals set) -->
+  <!-- Onboarding pane -->
   <div id="fin-pane-onboarding" class="fin-pane hidden" role="tabpanel">
     <div id="fin-onboarding-history" class="fin-chat-history"></div>
     <div class="fin-chat-input-row">
@@ -831,7 +850,7 @@
       <button id="fin-onboarding-send" class="fin-send-btn" aria-label="Send">
         <svg width="16" height="16"><use href="#ico-send"/></svg>
       </button>
-      <button id="fin-onboarding-skip" class="fin-ghost-btn">Skip setup</button>
+      <button id="fin-onboarding-skip" class="fin-ghost-btn">Skip for now</button>
     </div>
   </div>
 
