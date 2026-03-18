@@ -1678,6 +1678,7 @@ const voiceStatusBar = (() => {
 const financeUI = (function() {
     let _open = false;
     let _currentPeriod = 'All time';
+    let _onboardingStarted = false;
 
     // --- Panel open/close ---
     function open() {
@@ -1712,7 +1713,7 @@ const financeUI = (function() {
             if (el) el.classList.remove('active');
         });
         const activePane = document.getElementById(paneMap[tabName]);
-        if (activePane) activePane.classList.add('active');
+        if (activePane) { activePane.classList.remove('hidden'); activePane.classList.add('active'); }
     }
 
     // --- Onboarding check ---
@@ -1894,11 +1895,15 @@ const financeUI = (function() {
 
     // --- Onboarding step machine (Plan 05) ---
     function _startOnboarding() {
+        // Guard: only start once per panel lifetime; reset by _completeOnboarding/_skipBtn
+        if (_onboardingStarted) return;
+        _onboardingStarted = true;
+
         const historyEl = document.getElementById('fin-onboarding-history');
         const inputEl = document.getElementById('fin-onboarding-input');
         const sendBtn = document.getElementById('fin-onboarding-send');
         const skipBtn = document.getElementById('fin-onboarding-skip');
-        if (!historyEl || !inputEl) return;
+        if (!historyEl || !inputEl) { _onboardingStarted = false; return; }
 
         const CATEGORIES = ['Food', 'Transport', 'Shopping', 'Utilities', 'Entertainment', 'Other'];
         const STEPS = [
@@ -2014,6 +2019,7 @@ const financeUI = (function() {
 
             // Transition to dashboard after a short delay
             setTimeout(() => {
+                _onboardingStarted = false;
                 document.querySelectorAll('.fin-tab').forEach(t => t.style.display = '');
                 _activateTab('dashboard');
                 _loadDashboard(_currentPeriod);
@@ -2036,6 +2042,7 @@ const financeUI = (function() {
                     body: JSON.stringify({ goal_type: 'skipped', life_events: [], budgets: {}, horizon: '' }),
                 });
             } catch(e) {}
+            _onboardingStarted = false;
             document.querySelectorAll('.fin-tab').forEach(t => t.style.display = '');
             _activateTab('dashboard');
             _loadDashboard(_currentPeriod);
@@ -2047,8 +2054,9 @@ const financeUI = (function() {
 
     // --- Init: wire all DOM events ---
     function init() {
-        // Finance button in RSB collapsed rail
+        // Finance button in RSB collapsed rail AND expanded RSB header
         document.getElementById('btn-finance')?.addEventListener('click', open);
+        document.getElementById('btn-finance-rsb')?.addEventListener('click', open);
 
         // Close button
         document.getElementById('fin-close')?.addEventListener('click', close);
@@ -2065,6 +2073,10 @@ const financeUI = (function() {
         document.getElementById('fin-reset-goals')?.addEventListener('click', async () => {
             if (!confirm('Reset your financial goals? This will not delete your uploaded transactions.')) return;
             await fetch('/finance/reset_goals', { method: 'POST' });
+            // Clear onboarding history and reset started flag so _startOnboarding runs fresh
+            const historyEl = document.getElementById('fin-onboarding-history');
+            if (historyEl) historyEl.innerHTML = '';
+            _onboardingStarted = false;
             _checkOnboarding();
         });
 
