@@ -41,26 +41,25 @@ Plans:
 - [x] 01-06-PLAN.md — Visual verification checkpoint: human sign-off on all 4 requirements at 1080p and 1440p
 
 ### Phase 2: Financial Advisor
-**Goal**: Users go through a goal-setting onboarding conversation, then upload CIBC bank statement CSVs to see a Midnight Glass spending dashboard (category breakdown, budget vs actual, monthly trend, transaction list) and chat with the LLM about their finances — all deterministic SQL for numbers, all local, zero cloud
+**Goal**: Users go through a goal-setting onboarding conversation, then upload CIBC bank statement CSVs to see a Midnight Glass 3-column spending dashboard (Chart.js line + donut charts, 8-category budget sidebar, month-grouped expenses list) and chat with the LLM about their finances — all deterministic SQL for numbers, all local, zero cloud
 **Depends on**: Phase 1
 **Requirements**: FIN-01, FIN-02, FIN-03, FIN-04, FIN-05, FIN-06
 **Success Criteria** (what must be TRUE):
-  1. First time the Finance panel opens, the Narrator/FRT onboarding flow runs — user is asked about financial goals (save, invest, life events: vacation, wedding, house), budgets per category, and time horizon; answers persist to DB
-  2. User can upload a CIBC CSV export, specify the time period it covers, and have all transactions parsed into a SQLite transactions table with no data leaving the device
-  3. Every transaction is automatically assigned to one of the predefined categories (Food, Transport, Shopping, Utilities, Entertainment, Other) via deterministic rules — no LLM involved in categorisation
-  4. The Dashboard tab shows glass CSS charts: category spend breakdown, budget vs actual per category, monthly trend, and a scrollable transaction list — all numbers from SQL queries, not the LLM
-  5. Multiple CSV uploads (e.g. 6 months one by one) accumulate correctly — each tagged with its user-defined time period — and the dashboard aggregates across all uploaded periods
-  6. The Chat tab lets the user ask natural language questions about their spending; the LLM receives SQL-generated context (not raw CSV) and answers accurately
-**Plans**: 7 plans
+  1. First time the Finance panel opens, the onboarding flow runs — user is asked about financial goals, budgets per 8 categories, and time horizon; answers persist to DB
+  2. User can upload a CIBC CSV export with an account label, and have all transactions parsed into SQLite with no data leaving the device
+  3. Every transaction is automatically assigned to one of 8 predefined categories via deterministic rules — no LLM involved in categorisation
+  4. The Dashboard tab shows a 3-column layout: budget sidebar with progress bars, Chart.js line + donut charts, and month-grouped expenses list — all numbers from SQL queries
+  5. Multiple CSV uploads accumulate correctly with deduplication; dashboard aggregates across all uploaded periods derived from transaction dates
+  6. The Chat tab lets the user ask natural language questions about their spending; LLM receives SQL-generated context (not raw CSV) and answers accurately
+**Plans**: 6 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Test scaffold (Wave 0): conftest.py + 5 test files for FIN-01..06, all RED
-- [ ] 02-02-PLAN.md — Backend foundation: fin_* DB tables, CSV parsers, categoriser, upload/status endpoints
-- [ ] 02-03-PLAN.md — Frontend shell: Finance panel HTML overlay + all .fin-* CSS with glass recipe
-- [ ] 02-04-PLAN.md — Wiring: goals API endpoints, main.py registration, financeUI IIFE with open/close/tabs
-- [ ] 02-05-PLAN.md — Dashboard + onboarding: _loadDashboard() with 4 chart renderers, _startOnboarding() step machine
-- [ ] 02-06-PLAN.md — Finance chat: POST /finance/chat SSE with SQL context injection, frontend streaming handler
-- [ ] 02-07-PLAN.md — Human verification checkpoint: all 6 FIN requirements signed off
+- [ ] 02-01-PLAN.md — Backend V2: schema migration (account_label, 8 categories), updated endpoints, test updates
+- [ ] 02-02-PLAN.md — Frontend V2 shell: Chart.js bundle, 3-column HTML layout, CSS rewrite
+- [ ] 02-03-PLAN.md — JS core wiring: financeUI IIFE rewrite (periods, upload, refresh, expenses renderer)
+- [ ] 02-04-PLAN.md — Charts + budget sidebar: Chart.js line/donut renderers, budget sidebar with color states
+- [ ] 02-05-PLAN.md — Onboarding + chat: 8-category step machine, finance chat with SQL context
+- [ ] 02-06-PLAN.md — Human verification checkpoint: all 6 FIN requirements signed off
 
 ### Phase 3: LAB
 **Goal**: Users can tune model inference parameters through the UI and have those settings persist across sessions, giving students and power users full control without editing config files
@@ -116,7 +115,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. UI Polish | 6/6 | Complete | 2026-03-15 |
-| 2. Financial Advisor | 6/7 | In Progress|  |
+| 2. Financial Advisor | 0/6 | In Progress|  |
 | 3. LAB | 0/TBD | Not started | - |
 | 4. News RSS Feed | 0/TBD | Not started | - |
 | 5. YouTube Music via HA | 0/TBD | Not started | - |
