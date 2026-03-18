@@ -1679,6 +1679,8 @@ const financeUI = (function() {
     let _open = false;
     let _currentPeriod = 'All time';
     let _onboardingStarted = false;
+    let lineChart = null;
+    let donutChart = null;
 
     // --- Panel open/close ---
     function open() {
@@ -1693,6 +1695,9 @@ const financeUI = (function() {
         _open = false;
         const panel = document.getElementById('finance-panel');
         if (panel) panel.classList.add('hidden');
+        // Destroy charts to free canvas memory
+        if (lineChart) { lineChart.destroy(); lineChart = null; }
+        if (donutChart) { donutChart.destroy(); donutChart = null; }
     }
 
     // --- Tab switching ---
@@ -1779,12 +1784,18 @@ const financeUI = (function() {
             const hasData = data.transactions && data.transactions.length > 0;
             if (emptyState) emptyState.classList.toggle('hidden', hasData);
 
-            if (!hasData) return;
+            if (!hasData) {
+                renderLineChart([]);
+                renderDonutChart([]);
+                return;
+            }
 
             renderCategories(data.categories);
             renderBudgetActual(data.categories, data.budgets);
             renderTrend(data.trend);
             renderTransactions(data.transactions);
+            renderLineChart(data.trend);        // Chart.js line chart
+            renderDonutChart(data.categories);  // Chart.js donut chart
         } catch(e) {
             // Dashboard not yet available — show empty state
         }
@@ -1884,6 +1895,165 @@ const financeUI = (function() {
                 <span class="fin-bar-amount">$${t.total.toFixed(2)}</span>
               </div>`;
         }).join('');
+    }
+
+    function renderLineChart(trendData) {
+        const canvas = document.getElementById('fin-line-chart');
+        const overlay = canvas?.parentElement?.querySelector('.fin-chart-empty-overlay');
+        if (!canvas) return;
+
+        // Empty state
+        if (!trendData || trendData.length === 0) {
+            if (overlay) overlay.classList.remove('hidden');
+            if (lineChart) { lineChart.destroy(); lineChart = null; }
+            return;
+        }
+        if (overlay) overlay.classList.add('hidden');
+
+        // Format YYYY-MM as "Jan 2026"
+        const labels = trendData.map(t => {
+            const [y, m] = t.period.split('-');
+            const dt = new Date(parseInt(y), parseInt(m) - 1);
+            return dt.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        });
+        const amounts = trendData.map(t => parseFloat(t.total) || 0);
+
+        if (lineChart) lineChart.destroy();
+        lineChart = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Monthly Spend',
+                    data: amounts,
+                    borderColor: '#5A8CFF',
+                    borderWidth: 2,
+                    fill: true,
+                    backgroundColor: 'rgba(90, 140, 255, 0.08)',
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15,15,15,0.9)',
+                        borderColor: 'rgba(255,255,255,0.12)',
+                        borderWidth: 1,
+                        titleColor: '#fff',
+                        bodyColor: 'rgba(255,255,255,0.7)',
+                        padding: 8,
+                        displayColors: false,
+                        callbacks: {
+                            label: function(ctx) { return '$' + ctx.parsed.y.toFixed(2); }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: 'rgba(255,255,255,0.3)', font: { size: 11 } },
+                    },
+                    y: {
+                        grid: { color: 'rgba(255,255,255,0.06)' },
+                        ticks: {
+                            color: 'rgba(255,255,255,0.3)',
+                            font: { size: 11 },
+                            callback: function(v) { return '$' + v; }
+                        },
+                        beginAtZero: true,
+                    }
+                }
+            }
+        });
+    }
+
+    function renderDonutChart(categoryData) {
+        const canvas = document.getElementById('fin-donut-chart');
+        const overlay = canvas?.parentElement?.querySelector('.fin-chart-empty-overlay');
+        if (!canvas) return;
+
+        // Filter to categories with spend > 0, sort by amount descending
+        const data = (categoryData || []).filter(c => (c.total || 0) > 0)
+            .sort((a, b) => b.total - a.total);
+
+        // Empty state
+        if (data.length === 0) {
+            if (overlay) overlay.classList.remove('hidden');
+            if (donutChart) { donutChart.destroy(); donutChart = null; }
+            return;
+        }
+        if (overlay) overlay.classList.add('hidden');
+
+        // 8-slot blue tint palette (matches UI-SPEC)
+        const colors = [
+            'rgba(90, 140, 255, 1)',
+            'rgba(90, 140, 255, 0.85)',
+            'rgba(90, 140, 255, 0.7)',
+            'rgba(90, 140, 255, 0.55)',
+            'rgba(90, 140, 255, 0.4)',
+            'rgba(90, 140, 255, 0.28)',
+            'rgba(90, 140, 255, 0.18)',
+            'rgba(90, 140, 255, 0.10)',
+        ];
+
+        const labels = data.map(c => c.category);
+        const amounts = data.map(c => parseFloat(c.total) || 0);
+        const total = amounts.reduce((a, b) => a + b, 0);
+
+        if (donutChart) donutChart.destroy();
+        donutChart = new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: amounts,
+                    backgroundColor: colors.slice(0, data.length),
+                    borderColor: 'rgba(15,15,15,0.45)',
+                    borderWidth: 2,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: 'rgba(255,255,255,0.6)',
+                            padding: 12,
+                            font: { size: 11 },
+                            generateLabels: function(chart) {
+                                const ds = chart.data.datasets[0];
+                                return chart.data.labels.map((label, i) => ({
+                                    text: label + ' (' + Math.round((ds.data[i] / total) * 100) + '%)',
+                                    fillStyle: ds.backgroundColor[i],
+                                    index: i,
+                                }));
+                            }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15,15,15,0.9)',
+                        borderColor: 'rgba(255,255,255,0.12)',
+                        borderWidth: 1,
+                        titleColor: '#fff',
+                        bodyColor: 'rgba(255,255,255,0.7)',
+                        callbacks: {
+                            label: function(ctx) {
+                                const pct = ((ctx.parsed / total) * 100).toFixed(1);
+                                return ctx.label + ': $' + ctx.parsed.toFixed(2) + ' (' + pct + '%)';
+                            }
+                        }
+                    }
+                }
+            }
+        });
     }
 
     function renderTransactions(transactions) {
