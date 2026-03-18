@@ -351,15 +351,18 @@ async def upload_csv(
     # Determine account type from first non-empty row
     non_empty = [r for r in all_rows if any(c.strip() for c in r)]
     if not non_empty:
-        raise HTTPException(status_code=422, detail="CSV file is empty or contains no valid rows")
+        raise HTTPException(status_code=422, detail="Couldn't read that file. Make sure it's a CIBC chequing or credit card CSV export.")
 
     account_type = detect_account_type(non_empty[0])
 
     # Parse transactions
-    if account_type == "credit_card":
-        rows = parse_credit_card_csv(all_rows)
-    else:
-        rows = parse_chequing_csv(all_rows)
+    try:
+        if account_type == "credit_card":
+            rows = parse_credit_card_csv(all_rows)
+        else:
+            rows = parse_chequing_csv(all_rows)
+    except Exception:
+        raise HTTPException(status_code=422, detail="Couldn't read that file. Make sure it's a CIBC chequing or credit card CSV export.")
 
     upload_id = str(uuid.uuid4())
     now_iso = datetime.now(timezone.utc).isoformat()

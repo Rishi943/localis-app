@@ -2374,15 +2374,29 @@ const financeUI = (function() {
             });
         });
 
-        // Reset goals button
-        document.getElementById('fin-reset-goals')?.addEventListener('click', async () => {
-            if (!confirm('Reset your financial goals? This will not delete your uploaded transactions.')) return;
-            await fetch('/finance/reset_goals', { method: 'POST' });
-            // Clear onboarding history and reset started flag so _startOnboarding runs fresh
-            const historyEl = document.getElementById('fin-onboarding-history');
-            if (historyEl) historyEl.innerHTML = '';
-            _onboardingStarted = false;
-            _checkOnboarding();
+        // Reset goals button — inline confirmation (no browser dialog)
+        document.getElementById('fin-reset-goals')?.addEventListener('click', function handleResetClick() {
+            const btn = document.getElementById('fin-reset-goals');
+            if (!btn) return;
+
+            // Show inline confirmation
+            btn.innerHTML = 'Reset goals? <a id="fin-reset-confirm" style="color:var(--status-red);cursor:pointer;text-decoration:none;font-weight:600;">Yes, reset</a> · <a id="fin-reset-cancel" style="cursor:pointer;text-decoration:none;opacity:0.6;">Keep goals</a>';
+
+            document.getElementById('fin-reset-confirm')?.addEventListener('click', async (ev) => {
+                ev.stopPropagation();
+                await fetch('/finance/reset_goals', { method: 'POST' });
+                // Clear onboarding history and reset started flag so _startOnboarding runs fresh
+                const historyEl = document.getElementById('fin-onboarding-history');
+                if (historyEl) historyEl.innerHTML = '';
+                _onboardingStarted = false;
+                btn.textContent = 'Reset goals';
+                _checkOnboarding();
+            });
+
+            document.getElementById('fin-reset-cancel')?.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                btn.textContent = 'Reset goals';
+            });
         });
 
         // Period selector change
