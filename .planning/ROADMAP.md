@@ -51,7 +51,7 @@ Plans:
   4. The Dashboard tab shows a 3-column layout: budget sidebar with progress bars, Chart.js line + donut charts, and month-grouped expenses list — all numbers from SQL queries
   5. Multiple CSV uploads accumulate correctly with deduplication; dashboard aggregates across all uploaded periods derived from transaction dates
   6. The Chat tab lets the user ask natural language questions about their spending; LLM receives SQL-generated context (not raw CSV) and answers accurately
-**Plans**: 6 plans
+**Plans**: 7 plans
 
 Plans:
 - [ ] 02-01-PLAN.md — Backend V2: schema migration (account_label, 8 categories), updated endpoints, test updates
@@ -60,6 +60,7 @@ Plans:
 - [ ] 02-04-PLAN.md — Charts + budget sidebar: Chart.js line/donut renderers, budget sidebar with color states
 - [ ] 02-05-PLAN.md — Onboarding + chat: 8-category step machine, finance chat with SQL context
 - [ ] 02-06-PLAN.md — Human verification checkpoint: all 6 FIN requirements signed off
+- [ ] 02-07-PLAN.md — Gap closure: V2 schema migration (account_label, 8 categories, /periods, /accounts, dashboard_data), JS upload fix
 
 ### Phase 3: LAB
 **Goal**: Users can tune model inference parameters through the UI and have those settings persist across sessions, giving students and power users full control without editing config files
@@ -115,7 +116,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. UI Polish | 6/6 | Complete | 2026-03-15 |
-| 2. Financial Advisor | 0/6 | In Progress|  |
+| 2. Financial Advisor | 0/7 | In Progress|  |
 | 3. LAB | 0/TBD | Not started | - |
 | 4. News RSS Feed | 0/TBD | Not started | - |
 | 5. YouTube Music via HA | 0/TBD | Not started | - |
