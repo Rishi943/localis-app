@@ -267,12 +267,19 @@ def init_db():
         )
     """)
 
-    # 8. Finance Tables (Phase 2)
+    # 8. Finance Tables (Phase 2 — V2 schema with account_label)
+    # Drop and recreate fin tables on every startup to migrate V1 → V2 schema
+    c.execute("DROP TABLE IF EXISTS fin_transactions")
+    c.execute("DROP TABLE IF EXISTS fin_uploads")
+    c.execute("DROP TABLE IF EXISTS fin_goals")
+    # Reset onboarding flag so existing users re-run onboarding against V2 schema
+    set_app_setting('fin_onboarding_done', 'false')
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS fin_uploads (
             id TEXT PRIMARY KEY,
             filename TEXT NOT NULL,
-            period_label TEXT NOT NULL,
+            account_label TEXT NOT NULL,
             account_type TEXT NOT NULL,
             uploaded_at TEXT NOT NULL,
             row_count INTEGER NOT NULL DEFAULT 0
@@ -287,10 +294,10 @@ def init_db():
             amount REAL NOT NULL,
             type TEXT NOT NULL,
             category TEXT NOT NULL DEFAULT 'Other',
-            period_label TEXT NOT NULL,
+            account_label TEXT NOT NULL,
             account_type TEXT NOT NULL,
             FOREIGN KEY(upload_id) REFERENCES fin_uploads(id),
-            UNIQUE (date, description, amount, account_type)
+            UNIQUE (date, description, amount, account_label)
         )
     """)
     c.execute("""

@@ -95,6 +95,21 @@ CATEGORY_RULES: Dict[str, List[str]] = {
         "EVENTBRITE", "RAPTORS", "BLUE JAYS", "LEAFS", "MLSE",
         "GOOGLE PLAY", "APP STORE", "AUDIBLE", "KINDLE",
     ],
+    "Health & Fitness": [
+        "ANYTIME FITNESS", "GYM", "FITNESS", "PHARMA", "SHOPPERS DRUG",
+        "REXALL", "LIFE LABS", "PHYSIO", "DENTAL", "OPTICIAN", "MEDICAL",
+        "PHARMACY", "DRUGMART", "DRUG MART", "CLINIC", "CHIROPRACT",
+        "MASSAGE THERAPY", "YOGA", "PILATES", "CROSSFIT",
+    ],
+    "Government & Fees": [
+        "IMMIGRATION", "IRCC", "SERVICE CANADA", "CRA", "MINISTRY",
+        "GOVERNMENT", "MUNICIPAL", "COURT", "CUSTOMS", "CBSA",
+        "LICENCE", "LICENSE FEE", "PASSPORT", "VISA FEE", "PERMIT",
+        "PROPERTY TAX", "REVENUE CANADA", "GOV.CA",
+    ],
+    # Other is the catch-all fallback — listed here so all 8 categories
+    # are enumerable from CATEGORY_RULES (e.g. for budget UI iteration)
+    "Other": [],
 }
 
 # Payment keywords for credit card CSV — rows matching these are credits (payments), not spend
@@ -311,12 +326,12 @@ def parse_csv_bytes(content: bytes) -> List[Dict[str, Any]]:
 async def upload_csv(
     request: Request,
     file: UploadFile = File(...),
-    period_label: str = Form(...),
+    account_label: str = Form(...),
 ) -> Dict[str, Any]:
     """Upload a CIBC CSV (chequing or credit card) and persist transactions.
 
     Returns:
-        JSON: {upload_id, row_count, inserted, skipped_count, account_type}
+        JSON: {upload_id, row_count, inserted, skipped_count, account_type, message}
     """
     content = await file.read()
 
@@ -356,9 +371,9 @@ async def upload_csv(
     try:
         # Insert upload record
         c.execute(
-            """INSERT INTO fin_uploads (id, filename, period_label, account_type, uploaded_at, row_count)
+            """INSERT INTO fin_uploads (id, filename, account_label, account_type, uploaded_at, row_count)
                VALUES (?, ?, ?, ?, ?, ?)""",
-            (upload_id, filename, period_label, account_type, now_iso, len(rows)),
+            (upload_id, filename, account_label, account_type, now_iso, len(rows)),
         )
 
         inserted = 0
@@ -367,7 +382,7 @@ async def upload_csv(
         for row in rows:
             c.execute(
                 """INSERT OR IGNORE INTO fin_transactions
-                   (upload_id, date, description, amount, type, category, period_label, account_type)
+                   (upload_id, date, description, amount, type, category, account_label, account_type)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     upload_id,
@@ -376,7 +391,7 @@ async def upload_csv(
                     row["amount"],
                     row["type"],
                     row["category"],
-                    period_label,
+                    account_label,
                     account_type,
                 ),
             )
@@ -385,6 +400,7 @@ async def upload_csv(
             else:
                 skipped += 1
 
+        new_count = inserted
         conn.commit()
     except Exception:
         conn.rollback()
@@ -396,9 +412,10 @@ async def upload_csv(
     return {
         "upload_id": upload_id,
         "row_count": len(rows),
-        "inserted": inserted,
+        "inserted": new_count,
         "skipped_count": skipped,
         "account_type": account_type,
+        "message": f"\u2713 {new_count} new transactions added to {account_label} ({skipped} skipped \u2014 already imported)",
     }
 
 
@@ -425,9 +442,7 @@ async def finance_status(request: Request) -> Dict[str, Any]:
     periods: List[str] = []
     if upload_count > 0:
         c.execute(
-            """SELECT period_label FROM fin_transactions
-               GROUP BY period_label
-               ORDER BY MIN(date) ASC"""
+            "SELECT DISTINCT strftime('%Y-%m', date) as period FROM fin_transactions ORDER BY period ASC"
         )
         periods = [r[0] for r in c.fetchall()]
 
@@ -438,6 +453,45 @@ async def finance_status(request: Request) -> Dict[str, Any]:
         "upload_count": upload_count,
         "periods": periods,
     }
+
+
+# ---------------------------------------------------------------------------
+# V2 period and account listing endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/periods")
+async def get_periods(request: Request) -> Dict[str, Any]:
+    """Return distinct YYYY-MM months derived from transaction dates.
+
+    Returns:
+        JSON: {periods: ["2026-01", "2026-02", ...]}
+    """
+    conn = database._connect_db()
+    c = conn.cursor()
+    c.execute(
+        "SELECT DISTINCT strftime('%Y-%m', date) as period FROM fin_transactions ORDER BY period ASC"
+    )
+    periods = [r[0] for r in c.fetchall()]
+    conn.close()
+    return {"periods": periods}
+
+
+@router.get("/accounts")
+async def get_accounts(request: Request) -> Dict[str, Any]:
+    """Return distinct account labels from uploads.
+
+    Returns:
+        JSON: {accounts: ["CIBC Chequing", "CIBC Credit Card", ...]}
+    """
+    conn = database._connect_db()
+    c = conn.cursor()
+    c.execute(
+        "SELECT DISTINCT account_label FROM fin_uploads ORDER BY account_label ASC"
+    )
+    accounts = [r[0] for r in c.fetchall()]
+    conn.close()
+    return {"accounts": accounts}
 
 
 # ---------------------------------------------------------------------------
@@ -512,32 +566,27 @@ def _run_dashboard_queries(conn, period: str) -> Dict[str, Any]:
 
     Args:
         conn: open sqlite3.Connection
-        period: period label string, or "All time" for all periods
+        period: YYYY-MM string, or "All time" / "all" for all periods
 
     Returns:
-        dict with keys: categories, budget_actual, trend, transactions, has_goals, total_spend
+        dict with keys: categories, trend, transactions, budgets
     """
     c = conn.cursor()
-    period_filter = period if period != "All time" else None
+
+    # V2: period is a YYYY-MM string or "All time" / "all"
+    period_filter = period if period and period not in ("All time", "all") else None
+    period_clause = "AND strftime('%Y-%m', date) = ?" if period_filter else ""
+    period_params = [period_filter] if period_filter else []
 
     # 1. Category breakdown (debits only)
-    if period_filter:
-        c.execute(
-            """SELECT category, SUM(amount) as total, COUNT(*) as count
-               FROM fin_transactions
-               WHERE type = 'debit' AND period_label = ?
-               GROUP BY category
-               ORDER BY total DESC""",
-            (period_filter,),
-        )
-    else:
-        c.execute(
-            """SELECT category, SUM(amount) as total, COUNT(*) as count
-               FROM fin_transactions
-               WHERE type = 'debit'
-               GROUP BY category
-               ORDER BY total DESC"""
-        )
+    c.execute(
+        f"""SELECT category, SUM(amount) as total, COUNT(*) as count
+           FROM fin_transactions
+           WHERE type = 'debit' {period_clause}
+           GROUP BY category
+           ORDER BY total DESC""",
+        period_params,
+    )
     cat_rows = c.fetchall()
 
     grand_total = sum(r[1] for r in cat_rows) or 1.0  # avoid division by zero
@@ -551,36 +600,28 @@ def _run_dashboard_queries(conn, period: str) -> Dict[str, Any]:
         for r in cat_rows
     ]
 
-    # 2. Monthly trend (all periods, debits only — not filtered by period)
+    # 2. Monthly trend (ALL months regardless of period selector — debits only)
     c.execute(
-        """SELECT period_label, SUM(amount) as total_spend, COUNT(*) as tx_count
+        """SELECT strftime('%Y-%m', date) as period, SUM(amount) as total, COUNT(*) as count
            FROM fin_transactions
            WHERE type = 'debit'
-           GROUP BY period_label
-           ORDER BY MIN(date) ASC"""
+           GROUP BY period
+           ORDER BY period ASC"""
     )
     trend = [
-        {"period_label": r[0], "total_spend": round(r[1], 2), "tx_count": r[2]}
+        {"period": r[0], "total": round(r[1], 2), "count": r[2]}
         for r in c.fetchall()
     ]
 
     # 3. Transaction list (500 most recent, filtered by period)
-    if period_filter:
-        c.execute(
-            """SELECT date, description, amount, type, category, account_type
-               FROM fin_transactions
-               WHERE period_label = ?
-               ORDER BY date DESC
-               LIMIT 500""",
-            (period_filter,),
-        )
-    else:
-        c.execute(
-            """SELECT date, description, amount, type, category, account_type
-               FROM fin_transactions
-               ORDER BY date DESC
-               LIMIT 500"""
-        )
+    c.execute(
+        f"""SELECT date, description, amount, type, category, account_type, account_label
+           FROM fin_transactions
+           WHERE 1=1 {period_clause}
+           ORDER BY date DESC
+           LIMIT 500""",
+        period_params,
+    )
     transactions = [
         {
             "date": r[0],
@@ -589,43 +630,26 @@ def _run_dashboard_queries(conn, period: str) -> Dict[str, Any]:
             "type": r[3],
             "category": r[4],
             "account_type": r[5],
+            "account_label": r[6],
         }
         for r in c.fetchall()
     ]
 
-    # 4. Budget vs actual — join goals budgets JSON with category totals
-    c.execute("SELECT budgets FROM fin_goals ORDER BY id DESC LIMIT 1")
+    # 4. Budgets from fin_goals
+    c.execute("SELECT budgets FROM fin_goals ORDER BY created_at DESC LIMIT 1")
     goals_row = c.fetchone()
-    has_goals = goals_row is not None
-
-    budget_actual: List[Dict[str, Any]] = []
-    if has_goals:
+    budgets: Dict[str, Any] = {}
+    if goals_row and goals_row[0]:
         try:
-            budgets_dict: Dict[str, float] = json.loads(goals_row[0] or "{}")
+            budgets = json.loads(goals_row[0])
         except (json.JSONDecodeError, TypeError):
-            budgets_dict = {}
-
-        # Build a lookup from category totals
-        actuals_by_cat = {r["category"]: r["total"] for r in categories}
-
-        # Include all categories that have either a budget or actual spend
-        all_cats = set(budgets_dict.keys()) | set(actuals_by_cat.keys())
-        for cat in sorted(all_cats):
-            budget_actual.append({
-                "category": cat,
-                "actual": actuals_by_cat.get(cat, 0.0),
-                "budget": float(budgets_dict.get(cat, 0)),
-            })
-
-    total_spend = sum(r[1] for r in cat_rows)
+            pass
 
     return {
         "categories": categories,
-        "budget_actual": budget_actual,
         "trend": trend,
         "transactions": transactions,
-        "has_goals": has_goals,
-        "total_spend": round(total_spend, 2),
+        "budgets": budgets,
     }
 
 
@@ -707,48 +731,29 @@ def build_finance_context(conn_or_period=None, period: Optional[str] = None) -> 
 
     try:
         c = conn.cursor()
-        period_filter = period_label if period_label and period_label != "All time" else None
+        # V2: filter by YYYY-MM derived from date column
+        period_filter = period_label if period_label and period_label not in ('all', 'All time') else None
+        period_clause = "AND strftime('%Y-%m', date) = ?" if period_filter else ""
+        period_params = [period_filter] if period_filter else []
 
         # 1. Category breakdown (debits only)
-        if period_filter:
-            c.execute(
-                """SELECT category, SUM(amount) as total, COUNT(*) as count
-                   FROM fin_transactions
-                   WHERE type = 'debit' AND period_label = ?
-                   GROUP BY category
-                   ORDER BY total DESC""",
-                (period_filter,),
-            )
-        else:
-            c.execute(
-                """SELECT category, SUM(amount) as total, COUNT(*) as count
-                   FROM fin_transactions
-                   WHERE type = 'debit'
-                   GROUP BY category
-                   ORDER BY total DESC"""
-            )
+        c.execute(
+            f"""SELECT category, SUM(amount) as total, COUNT(*) as count
+               FROM fin_transactions
+               WHERE type = 'debit' {period_clause}
+               GROUP BY category ORDER BY total DESC""",
+            period_params,
+        )
         cat_rows = c.fetchall()
 
         # 2. Top 5 merchants (debits only)
-        if period_filter:
-            c.execute(
-                """SELECT description, SUM(amount) as total
-                   FROM fin_transactions
-                   WHERE type = 'debit' AND period_label = ?
-                   GROUP BY description
-                   ORDER BY total DESC
-                   LIMIT 5""",
-                (period_filter,),
-            )
-        else:
-            c.execute(
-                """SELECT description, SUM(amount) as total
-                   FROM fin_transactions
-                   WHERE type = 'debit'
-                   GROUP BY description
-                   ORDER BY total DESC
-                   LIMIT 5"""
-            )
+        c.execute(
+            f"""SELECT description, SUM(amount) as total
+               FROM fin_transactions
+               WHERE type = 'debit' {period_clause}
+               GROUP BY description ORDER BY total DESC LIMIT 5""",
+            period_params,
+        )
         merchant_rows = c.fetchall()
 
         # 3. Goals and budgets
