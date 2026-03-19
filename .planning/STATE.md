@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 02.1-01-PLAN.md
-last_updated: "2026-03-19T13:07:44.075Z"
+stopped_at: Completed 02.1-03-PLAN.md
+last_updated: "2026-03-19T13:12:02.457Z"
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 22
-  completed_plans: 17
+  completed_plans: 18
 ---
 
 # Project State
@@ -61,6 +61,7 @@ Plan: 1 of 6
 | Phase 02-financial-advisor P09 | 6 | 2 tasks | 3 files |
 | Phase 02-financial-advisor P10 | 2 | 2 tasks | 1 files |
 | Phase 02.1 P01 | 2 | 3 tasks | 3 files |
+| Phase 02.1 P03 | 2 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -109,6 +110,8 @@ Recent decisions affecting current work:
 - [Phase 02.1]: SQLite partial index WHERE clause dropped — used plain index ON notes(due_at, dismissed) for cross-version compatibility
 - [Phase 02.1]: Hard delete for DELETE /notes/{id}; dismissed=1 only for reminder lifecycle (not note deletion)
 - [Phase 02.1]: Notes module follows register_*(app, db_path) pattern from finance.py — same _db(request) helper pattern
+- [Phase 02.1]: notes.add / notes.retrieve not in ALLOWED_TOOLS in main.py yet — e2e tests validate backing endpoints directly; Plan 05 will wire tools into chat pipeline
+- [Phase 02.1]: chime.mp3 generated as true MPEG ADTS via ffmpeg libmp3lame (880 Hz A5, exponential decay, 0.5s)
 
 ### Roadmap Evolution
 
@@ -132,6 +135,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T13:07:44.073Z
-Stopped at: Completed 02.1-01-PLAN.md
+Last session: 2026-03-19T13:12:02.454Z
+Stopped at: Completed 02.1-03-PLAN.md
 Resume file: None
