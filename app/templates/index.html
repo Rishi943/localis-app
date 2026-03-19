@@ -360,38 +360,52 @@
           <span class="voice-status-tag"></span>
         </div>
 
-        <!-- Mode pills (replaces tools-chip-row) -->
-        <div id="mode-pills" class="mode-pills">
-          <button id="pill-web"      class="mode-pill" data-tool="web_search">
-            <svg width="11" height="11"><use href="#ico-web"/></svg> Web
-          </button>
-          <button id="pill-home"     class="mode-pill" data-tool="assist_mode">
-            <svg width="11" height="11"><use href="#ico-home"/></svg> Home
-          </button>
-          <button id="pill-upload"   class="mode-pill" data-tool="rag_upload">
-            <svg width="11" height="11"><use href="#ico-file"/></svg> Upload
-          </button>
-          <button id="pill-remember" class="mode-pill" data-tool="memory_write">
-            <svg width="11" height="11"><use href="#ico-memory"/></svg> Remember
-          </button>
+        <!-- Action cluster: TOOLS + VOICE groups above the input pill -->
+        <div id="action-cluster" class="action-cluster">
+          <div class="action-group" data-label="TOOLS">
+            <button id="pill-web"      class="ac-btn mode-pill" data-tool="web_search">
+              <svg width="13" height="13"><use href="#ico-web"/></svg>
+              <span>Web</span>
+            </button>
+            <button id="pill-home"     class="ac-btn mode-pill" data-tool="assist_mode">
+              <svg width="13" height="13"><use href="#ico-home"/></svg>
+              <span>Home</span>
+            </button>
+            <button id="think-toggle"  class="ac-btn">
+              <svg width="13" height="13"><use href="#ico-memory"/></svg>
+              <span>Think</span>
+            </button>
+            <button id="pill-remember" class="ac-btn mode-pill" data-tool="memory_write">
+              <svg width="13" height="13"><use href="#ico-memory"/></svg>
+              <span>Remember</span>
+            </button>
+            <button id="pill-upload"   class="ac-btn mode-pill" data-tool="rag_upload">
+              <svg width="13" height="13"><use href="#ico-file"/></svg>
+              <span>Upload</span>
+            </button>
+          </div>
+          <div class="action-cluster-divider"></div>
+          <div class="action-group" data-label="VOICE">
+            <button id="voice-mic-btn" class="ac-btn ac-btn-voice" title="Hold to speak" aria-label="Push to talk" hidden>
+              <svg width="13" height="13"><use href="#ico-voice"/></svg>
+              <span>Mic</span>
+            </button>
+            <button id="wakeword-toggle-btn" class="ac-btn ac-btn-wakeword" title="Wake word: OFF" aria-label="Toggle wake word" hidden>
+              <svg width="13" height="13"><use href="#ico-voice"/></svg>
+              <span id="wakeword-state-label" class="wakeword-state-label">Hey Jarvis</span>
+            </button>
+          </div>
         </div>
 
-        <!-- Input row -->
-        <div class="input-row">
-          <!-- Hidden file input — preserve original ID -->
-          <input type="file" id="from-file-input" multiple hidden accept=".pdf,.txt,.md,.docx,.csv,application/pdf,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
-          <!-- Voice mic — preserve original ID -->
-          <button id="voice-mic-btn" class="voice-mic-btn" title="Hold to speak" aria-label="Push to talk" hidden>
-            <svg width="14" height="14"><use href="#ico-voice"/></svg>
-          </button>
-          <!-- Wakeword toggle — preserve original ID -->
-          <button id="wakeword-toggle-btn" class="wakeword-toggle-btn" title="Wake word: OFF" aria-label="Toggle wake word" hidden>
-            <svg width="14" height="14"><use href="#ico-voice"/></svg>
-            <span id="wakeword-state-label" class="wakeword-state-label"></span>
-          </button>
-          <textarea id="prompt" rows="1" placeholder="Message Localis..." autocomplete="off"></textarea>
+        <!-- Minimal input pill -->
+        <div class="input-pill">
+          <input type="file" id="from-file-input" multiple hidden
+            accept=".pdf,.txt,.md,.docx,.csv,application/pdf,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+          <textarea id="prompt" rows="1" placeholder="Message Localis…" autocomplete="off"></textarea>
           <span id="token-estimate" class="token-estimate"></span>
-          <button id="send-btn" class="send-btn">SEND</button>
+          <button id="send-btn" class="send-btn">
+            <svg width="14" height="14"><use href="#ico-right"/></svg>
+          </button>
         </div>
 
         <!-- Voice mode toggle pill (hidden until voice available) -->
@@ -699,7 +713,6 @@
     <div id="tools-chip-row"></div>
     <button id="tools-picker-btn"></button>
     <div id="tui-prefix"></div>
-    <button id="think-toggle"></button>
     <button id="btn-open-settings-sidebar"></button>
     <button id="btn-open-settings-rail"></button>
     <button id="btn-rail-model"></button>

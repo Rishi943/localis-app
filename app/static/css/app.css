@@ -422,35 +422,11 @@ body.app-ready .app-container { display: flex; }
 .action-card-title { font-weight: 600; }
 .action-card-sub   { font-size: 9px; opacity: .5; margin-top: 1px; }
 
-/* ── Mode pills ──────────────────── */
-.mode-pills { display: flex; gap: 4px; }
-.mode-pill {
-  padding: 4px 10px; border-radius: 100px;
-  font-size: 9px; font-weight: 500;
-  background: rgba(255,255,255,.03);
-  border: 1px solid rgba(255,255,255,.08);
-  color: rgba(255,255,255,.3);
-  display: flex; align-items: center; gap: 5px;
-  transition: all .15s;
-}
-.mode-pill.active {
-  background: rgba(245,158,11,.12);
-  border-color: rgba(245,158,11,.3);
-  color: #fcd34d;
-  box-shadow: 0 0 8px rgba(245,158,11,.1);
-}
-.mode-pill.active svg { color: #fcd34d; }
+/* ── Mode pills (legacy — hidden, kept for JS class-selector compat) ── */
+.mode-pills { display: none; }
 
-/* ── Input row ───────────────────── */
-.input-row {
-  display: flex; align-items: center; gap: 7px;
-  background: rgba(255,255,255,.05);
-  border: 1px solid rgba(255,255,255,.09);
-  border-top-color: rgba(255,255,255,.13);
-  border-radius: 100px;
-  padding: 7px 10px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.07);
-}
+/* ── Input row (legacy — hidden) ────────────────────── */
+.input-row { display: none; }
 .voice-mic-btn {
   width: 26px; height: 26px; border-radius: 50%;
   background: rgba(255,255,255,.07);
@@ -473,6 +449,121 @@ body.app-ready .app-container { display: flex; }
   color: rgba(255,255,255,.5);
   letter-spacing: .04em;
 }
+
+/* ── Action Cluster ─────────────────────────────────────── */
+.action-cluster {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--bg-panel);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  backdrop-filter: var(--glass-filter);
+}
+
+.action-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.action-cluster-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(255,255,255,0.08);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.ac-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  color: rgba(255,255,255,0.55);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.ac-btn:hover {
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.8);
+}
+
+.ac-btn.active {
+  background: rgba(18,117,226,0.15);
+  border-color: rgba(18,117,226,0.4);
+  color: var(--accent-primary);
+}
+
+.ac-btn-voice.active {
+  background: rgba(16,185,129,0.15);
+  border-color: rgba(16,185,129,0.4);
+  color: #10B981;
+}
+
+.ac-btn-wakeword.active {
+  background: rgba(245,158,11,0.15);
+  border-color: rgba(245,158,11,0.4);
+  color: #F59E0B;
+}
+
+/* ── Input Pill ──────────────────────────────────────────── */
+.input-pill {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  background: var(--bg-panel);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 100px;
+  padding: 10px 16px;
+  min-height: 52px;
+  backdrop-filter: var(--glass-filter);
+}
+
+.input-pill textarea#prompt {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 15px;
+  resize: none;
+  max-height: 160px;
+  line-height: 1.5;
+  padding: 0;
+  font-family: inherit;
+}
+
+.input-pill .send-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  color: #fff;
+  padding: 0;
+  font-size: unset;
+  font-weight: unset;
+  letter-spacing: unset;
+}
+
+.input-pill .send-btn:hover { opacity: 0.85; }
 
 /* ── Right sidebar ───────────────── */
 .rsb {
