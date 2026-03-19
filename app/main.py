@@ -1069,7 +1069,7 @@ async def chat_endpoint(req: ChatRequest):
     if effective_tool_actions:
         logger.debug(f"[Chat] Tools requested: {[t.get('type') if isinstance(t, dict) else t for t in effective_tool_actions]}")
         # Validate and sanitize tool_actions
-        ALLOWED_TOOLS = {"web_search", "rag_retrieve", "memory_write", "memory_retrieve"}
+        ALLOWED_TOOLS = {"web_search", "rag_retrieve", "memory_write", "memory_retrieve", "notes.add", "notes.retrieve"}
         validated_tools = []
         seen = set()
 
@@ -1270,6 +1270,95 @@ async def chat_endpoint(req: ChatRequest):
                         }
                         result["error"] = skip_reason
                         logger.warning(f"[Tools] memory_write failed: {skip_reason}")
+
+                # --- NOTES ADD ---
+                elif tool_name == "notes.add":
+                    import sqlite3 as _sqlite3
+                    import uuid as _uuid
+                    from datetime import datetime as _dt, timezone as _tz
+
+                    note_content = tool_config.get("content", user_msg)
+                    note_type = tool_config.get("note_type", "note")
+                    due_at = tool_config.get("due_at", None)
+                    color = tool_config.get("color", "default")
+
+                    note_id = str(_uuid.uuid4())
+                    now = _dt.now(_tz.utc).isoformat()
+
+                    _conn = _sqlite3.connect(database.DB_NAME)
+                    try:
+                        _c = _conn.cursor()
+                        _c.execute(
+                            """INSERT INTO notes (id, content, note_type, due_at, color, pinned, dismissed, created_at, updated_at)
+                               VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)""",
+                            (note_id, note_content, note_type, due_at, color, now, now)
+                        )
+                        _conn.commit()
+                    finally:
+                        _conn.close()
+
+                    if note_type == "reminder" and due_at:
+                        confirm_msg = f"Reminder set for {due_at}: {note_content[:80]}"
+                    else:
+                        confirm_msg = f"Note saved: {note_content[:80]}"
+
+                    result["message"] = {
+                        "role": "system",
+                        "content": (
+                            f"[TOOL RESULT: notes.add]\n"
+                            f"{confirm_msg}\n"
+                            f"Acknowledge this note was saved. Say 'Got it. Note saved.' for notes, "
+                            f"or 'Reminder set for [time].' for reminders. Keep the confirmation brief."
+                        )
+                    }
+                    result["success"] = True
+                    logger.info(f"Tool notes.add completed: {note_type} id={note_id}")
+
+                # --- NOTES RETRIEVE ---
+                elif tool_name == "notes.retrieve":
+                    import sqlite3 as _sqlite3
+
+                    query = tool_config.get("query", "")
+
+                    _conn = _sqlite3.connect(database.DB_NAME)
+                    try:
+                        _c = _conn.cursor()
+                        if query:
+                            _c.execute(
+                                """SELECT id, content, note_type, due_at, color, pinned, created_at
+                                   FROM notes
+                                   WHERE dismissed = 0 AND content LIKE ?
+                                   ORDER BY pinned DESC, created_at DESC
+                                   LIMIT 20""",
+                                (f"%{query}%",)
+                            )
+                        else:
+                            _c.execute(
+                                """SELECT id, content, note_type, due_at, color, pinned, created_at
+                                   FROM notes
+                                   WHERE dismissed = 0
+                                   ORDER BY pinned DESC, created_at DESC
+                                   LIMIT 20"""
+                            )
+                        rows = _c.fetchall()
+                    finally:
+                        _conn.close()
+
+                    if rows:
+                        notes_text = "\n".join(
+                            f"- [{r[2]}]{' ⏰ ' + r[3] if r[3] else ''} {r[1]}"
+                            for r in rows
+                        )
+                        content = f"[TOOL RESULT: notes.retrieve]\nUser's saved notes:\n{notes_text}"
+                    else:
+                        content = "[TOOL RESULT: notes.retrieve]\nNo notes found."
+
+                    result["message"] = {
+                        "role": "system",
+                        "content": content
+                    }
+                    result["success"] = True
+                    logger.info(f"Tool notes.retrieve completed ({len(rows)} notes)")
 
                 else:
                     result["error"] = f"Unknown tool: {tool_name}"
