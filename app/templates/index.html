@@ -628,28 +628,30 @@
 
     <!-- Collapsed icon rail (shown when sidebar is collapsed) -->
     <div id="right-rail" class="rsb-rail hidden">
-      <button class="toggle-btn" id="right-rail-toggle" aria-label="Expand sidebar">
-        <svg width="12" height="12"><use href="#ico-left"/></svg>
+      <!-- Expand RSB — MUST keep id="right-rail-toggle" for JS -->
+      <button id="right-rail-toggle" class="rsb-rail-icon" title="Expand controls">
+        <svg width="18" height="18"><use href="#ico-left"/></svg>
       </button>
-      <button class="rsb-rail-icon" data-section="rsb-sec-lights" title="Lights">
-        <svg width="16" height="16"><use href="#ico-home"/></svg>
+      <!-- 4 navigation icons -->
+      <button class="rsb-rail-icon" data-section="rsb-sec-lights" title="Home Automation">
+        <svg width="18" height="18"><use href="#ico-home"/></svg>
       </button>
       <button class="rsb-rail-icon" data-section="rsb-sec-model" title="Model">
-        <svg width="16" height="16"><use href="#ico-model"/></svg>
+        <svg width="18" height="18"><use href="#ico-memory"/></svg>
       </button>
-      <button class="rsb-rail-icon" data-section="rsb-sec-prompt" title="System Prompt">
-        <svg width="16" height="16"><use href="#ico-settings"/></svg>
+      <button class="rsb-rail-icon fin-rail-btn" id="btn-finance" title="Finance Dashboard">
+        <svg width="18" height="18"><use href="#ico-finance"/></svg>
       </button>
-      <button class="rsb-rail-icon" data-section="rsb-sec-stats" title="System">
-        <svg width="16" height="16"><use href="#ico-temp"/></svg>
-      </button>
-      <button id="btn-finance" class="rsb-rail-icon fin-rail-btn" title="Finance">
-        <svg width="16" height="16"><use href="#ico-finance"/></svg>
-      </button>
-      <button class="rsb-rail-icon" id="btn-notes-open" title="Notes">
-        <svg class="icon" width="16" height="16"><use href="#icon-notes"/></svg>
+      <button class="rsb-rail-icon" id="btn-notes-open" title="Notes &amp; Reminders">
+        <svg width="18" height="18"><use href="#icon-notes"/></svg>
         <span class="notes-badge hidden" id="notes-badge">0</span>
       </button>
+      <!-- Footer -->
+      <div class="rsb-rail-foot">
+        <button class="rsb-rail-icon" title="Settings" onclick="toggleSettings(true)">
+          <svg width="18" height="18"><use href="#ico-settings"/></svg>
+        </button>
+      </div>
     </div>
 
   </div><!-- /right-sidebar -->
