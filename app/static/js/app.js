@@ -5386,17 +5386,59 @@ function buildMessageHTML(role, text) {
         </div>`;
 }
 
-function buildActionCardHTML(type, title, subtitle) {
-    const cardClass = type === 'home' ? 'home' : 'memory';
-    const iconId   = type === 'home' ? 'ico-home' : 'ico-memory';
+function buildToolPillHTML(type, title, subtitle, detailHTML, defaultExpanded = false) {
+    const id = 'tool-' + Math.random().toString(36).slice(2, 8);
+    const iconId = type === 'home' ? 'ico-home' : type === 'search' ? 'ico-web' : 'ico-memory';
+    const statusLabel = subtitle || 'done';
     return `
-        <div class="action-card ${cardClass}">
-          <svg width="16" height="16" style="flex-shrink:0"><use href="#${iconId}"/></svg>
-          <div>
-            <div class="action-card-title">${escapeHtml(title)}</div>
-            <div class="action-card-sub">${escapeHtml(subtitle)}</div>
+        <div class="tool-pill-wrap ${defaultExpanded ? 'expanded' : ''}" id="${id}">
+          <button class="tool-pill" onclick="var w=document.getElementById('${id}'); w.classList.toggle('expanded'); this.setAttribute('aria-expanded', w.classList.contains('expanded'))" aria-expanded="${defaultExpanded}">
+            <span class="tool-pill-dot ${type}"></span>
+            <svg width="12" height="12"><use href="#${iconId}"/></svg>
+            <span class="tool-pill-label">${escapeHtml(title)}</span>
+            <span class="tool-pill-status">· ${escapeHtml(statusLabel)}</span>
+            <svg class="tool-pill-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none"
+                 stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3,3 5,7 7,3"/>
+            </svg>
+          </button>
+          <div class="tool-detail">
+            ${detailHTML}
           </div>
         </div>`;
+}
+
+function buildLightDetailHTML(entityId, newState) {
+    return `
+        <div class="tool-detail-row">
+          <span class="tool-detail-key">Entity</span>
+          <span class="tool-detail-val mono">${escapeHtml(entityId)}</span>
+        </div>
+        <div class="tool-detail-row">
+          <span class="tool-detail-key">Change</span>
+          <span class="tool-detail-val badge">&rarr; ${escapeHtml(newState?.toUpperCase() || 'ACTION')}</span>
+        </div>`;
+}
+
+function buildMemoryDetailHTML(key, value) {
+    return `
+        <div class="tool-detail-row">
+          <span class="tool-detail-key mono">${escapeHtml(key)}</span>
+          <span class="tool-detail-val">${escapeHtml(value)}</span>
+        </div>`;
+}
+
+function buildSearchDetailHTML(results) {
+    if (!Array.isArray(results)) return `<div class="tool-detail-empty">No results</div>`;
+    return results.slice(0, 3).map((r, i) => `
+        <div class="tool-detail-result">
+          <span class="tool-detail-num">${i + 1}</span>
+          <div>
+            <div class="tool-detail-rtitle">${escapeHtml(r.title || '')}</div>
+            <div class="tool-detail-rsnip">${escapeHtml((r.snippet || '').slice(0, 120))}…</div>
+            <div class="tool-detail-rdomain mono">${escapeHtml(r.url ? new URL(r.url).hostname : '')}</div>
+          </div>
+        </div>`).join('');
 }
 
 // --- MESSAGE ACTION CHIPS ---
@@ -6606,7 +6648,8 @@ const api = {
                         const chatHistory = document.getElementById('chat-history');
                         if (chatHistory) {
                             chatHistory.insertAdjacentHTML('beforeend',
-                                buildActionCardHTML('memory', 'Memory saved', `Saved: ${key}`)
+                                buildToolPillHTML('memory', 'memory.write', `Saved: ${key}`,
+                                    buildMemoryDetailHTML(key, ''), true)
                             );
                         }
                     }
@@ -6682,7 +6725,8 @@ const api = {
                 const chatHistory = document.getElementById('chat-history');
                 if (chatHistory) {
                     chatHistory.insertAdjacentHTML('beforeend',
-                        buildActionCardHTML('home', 'Light controlled', 'Home Assistant action')
+                        buildToolPillHTML('home', 'assist.action', 'Light controlled',
+                            buildLightDetailHTML('light.rishi_room_light', 'off'), true)
                     );
                 }
             }
