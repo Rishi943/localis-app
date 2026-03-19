@@ -113,7 +113,7 @@ textarea { font-family: var(--font-ui); }
   box-shadow: var(--glass-shadow);
   transition: width .2s ease;
 }
-.lsb.collapsed { width: 44px; overflow: hidden; }
+.lsb.collapsed { width: 64px; overflow: hidden; }
 .lsb-head {
   padding: 11px 10px 8px;
   border-bottom: 1px solid rgba(255,255,255,.07);
@@ -127,6 +127,7 @@ textarea { font-family: var(--font-ui); }
   white-space: nowrap; overflow: hidden;
 }
 .lsb.collapsed .lsb-title { display: none; }
+.lsb.collapsed .lsb-head { display: none; }
 .new-chat-btn {
   margin: 0 8px 8px;
   padding: 7px 10px;
@@ -139,8 +140,7 @@ textarea { font-family: var(--font-ui); }
   display: flex; align-items: center; gap: 7px;
   white-space: nowrap; overflow: hidden;
 }
-.lsb.collapsed .new-chat-btn { padding: 8px; justify-content: center; }
-.lsb.collapsed .new-chat-btn span { display: none; }
+.lsb.collapsed .new-chat-btn { display: none; }
 .sess-list {
   flex: 1; overflow-y: auto; overflow-x: hidden;
   padding: 0 6px;
@@ -168,7 +168,7 @@ textarea { font-family: var(--font-ui); }
   flex-shrink: 0;
   display: flex; align-items: center; gap: 8px;
 }
-.lsb.collapsed .lsb-foot { justify-content: center; }
+.lsb.collapsed .lsb-foot { display: none; }
 .status-dot {
   width: 5px; height: 5px; border-radius: 50%;
   background: var(--status-green); flex-shrink: 0;
@@ -180,6 +180,64 @@ textarea { font-family: var(--font-ui); }
 .lsb.collapsed .status-txt { display: none; }
 .lsb:not(.collapsed) .lsb-foot-settings { display: none; }
 .lsb.collapsed .lsb-foot-settings { display: flex; align-items: center; justify-content: center; width: 100%; padding: 8px 0; cursor: pointer; }
+.lsb.collapsed #left-rail { display: flex; }
+
+/* ── LSB Rail ────────────────────────────────────────────── */
+#left-rail {
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 0;
+  width: 64px;
+  height: 100%;
+  overflow: hidden;
+}
+
+.lsb-rail-brand {
+  color: var(--accent-light);
+  padding: 6px;
+  margin-bottom: 4px;
+}
+
+.lsb-rail-expand {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: rgba(255,255,255,0.4);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.lsb-rail-expand:hover { background: rgba(255,255,255,0.09); }
+
+.lsb-rail-icon {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.35);
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.lsb-rail-icon:hover {
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.7);
+}
+
+.lsb-rail-foot {
+  margin-top: auto;
+  padding-bottom: 8px;
+}
 
 /* ── Toggle button (shared) ──────── */
 .toggle-btn {

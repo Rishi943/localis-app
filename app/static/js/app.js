@@ -3968,6 +3968,9 @@ const modePills = (() => {
       const use = btn.querySelector('use');
       if (use) use.setAttribute('href', collapsed ? '#ico-right' : '#ico-left');
     }
+    // Show/hide left rail
+    const lRail = document.getElementById('left-rail');
+    if (lRail) lRail.classList.toggle('hidden', !collapsed);
   }
 
   function toggleRight() {
@@ -3987,6 +3990,13 @@ const modePills = (() => {
   if (lBtn) lBtn.addEventListener('click', toggleLeft);
   if (rBtn) rBtn.addEventListener('click', toggleRight);
   if (rRailBtn) rRailBtn.addEventListener('click', toggleRight);
+
+  // LSB rail buttons
+  document.getElementById('left-sidebar-expand')?.addEventListener('click', toggleLeft);
+  document.getElementById('lsb-rail-new-chat')?.addEventListener('click', () =>
+      document.getElementById('btn-new-chat')?.click());
+  document.getElementById('lsb-rail-settings')?.addEventListener('click', () =>
+      toggleSettings(true));
 
   // Rail icons → expand sidebar AND scroll to target section
   document.querySelectorAll('.rsb-rail-icon').forEach(btn => {
