@@ -55,6 +55,7 @@ class UpdateNoteRequest(BaseModel):
     color: Optional[str] = None
     pinned: Optional[int] = None
     due_at: Optional[str] = None  # ISO8601 UTC string; empty string clears the reminder time
+    note_type: Optional[str] = None  # "note" | "reminder" — set when promoting/demoting
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +182,11 @@ async def update_note(note_id: str, req: UpdateNoteRequest, request: Request):
             # empty string → clear reminder time; ISO string → set it
             updates.append("due_at = ?")
             params.append(req.due_at if req.due_at else None)
+        if req.note_type is not None:
+            if req.note_type not in VALID_TYPES:
+                raise HTTPException(status_code=400, detail=f"Invalid note_type: {req.note_type}")
+            updates.append("note_type = ?")
+            params.append(req.note_type)
         if not updates:
             raise HTTPException(status_code=400, detail="No fields to update")
 

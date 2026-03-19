@@ -1357,12 +1357,33 @@ async def chat_endpoint(req: ChatRequest):
                 elif tool_name == "notes.add":
                     import sqlite3 as _sqlite3
                     import uuid as _uuid
-                    from datetime import datetime as _dt, timezone as _tz
+                    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 
                     note_content = tool_config.get("content", user_msg)
                     note_type = tool_config.get("note_type", "note")
                     due_at = tool_config.get("due_at", None)
                     color = tool_config.get("color", "default")
+
+                    # Auto-detect reminder intent from message when tool_config has no type
+                    if note_type == "note" and re.search(r'\b(remind|reminder)\b', user_msg, re.IGNORECASE):
+                        note_type = "reminder"
+
+                    # Auto-compute due_at for reminders when not provided
+                    if note_type == "reminder" and not due_at:
+                        _now_local = _dt.now().astimezone()
+                        _time_m = re.search(r'\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b', user_msg, re.IGNORECASE)
+                        if _time_m:
+                            _hr = int(_time_m.group(1)); _mn = int(_time_m.group(2) or 0)
+                            _ap = (_time_m.group(3) or '').lower()
+                            if _ap == 'pm' and _hr < 12: _hr += 12
+                            elif _ap == 'am' and _hr == 12: _hr = 0
+                            _base = (_now_local + _td(days=1)) if re.search(r'\btomorrow\b', user_msg, re.IGNORECASE) else _now_local
+                            _due = _base.replace(hour=_hr, minute=_mn, second=0, microsecond=0)
+                            if _due <= _now_local: _due += _td(days=1)
+                        else:
+                            # Default: tomorrow 8am local
+                            _due = (_now_local + _td(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+                        due_at = _due.astimezone(_tz.utc).isoformat()
 
                     note_id = str(_uuid.uuid4())
                     now = _dt.now(_tz.utc).isoformat()

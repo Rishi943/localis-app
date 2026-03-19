@@ -2769,10 +2769,10 @@ const notesUI = (() => {
         textarea.className = 'card-textarea';
         textarea.value = note.content;
 
-        // Clock icon + datetime-local input for reminders
+        // Clock icon + datetime-local input for all notes (set a time → becomes reminder)
         let dateRow = null;
         let dateInput = null;
-        if (note.note_type === 'reminder') {
+        {
             dateRow = document.createElement('div');
             dateRow.className = 'card-edit-date-row';
             dateRow.innerHTML = '<span class="card-edit-clock" title="Reminder time">&#x23F0;</span>';
@@ -2816,8 +2816,10 @@ const notesUI = (() => {
                 if (localVal) {
                     const d = new Date(localVal);
                     patch.due_at = d.toISOString();
-                } else {
+                    if (note.note_type !== 'reminder') patch.note_type = 'reminder';
+                } else if (note.due_at) {
                     patch.due_at = '';  // clear reminder time
+                    patch.note_type = 'note';  // demote to plain note
                 }
             }
             if (Object.keys(patch).length === 0) {
@@ -6454,11 +6456,9 @@ const api = {
         state.lastUserMessage = promptText;
         // Hide welcome state on first message
         els.welcomeState?.classList.add('hidden');
-        if (!textOverride) {
-            appendMessage('user', promptText);
-            els.prompt.value = ''; els.prompt.style.height = 'auto';
-            if (els.tokenEstimate) els.tokenEstimate.textContent = '';
-        }
+        appendMessage('user', promptText);
+        els.prompt.value = ''; els.prompt.style.height = 'auto';
+        if (els.tokenEstimate) els.tokenEstimate.textContent = '';
         state.isGenerating = true;
         let typeInterval = null;
         let lastStreamStats = null;
