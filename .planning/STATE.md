@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 02.1-04-PLAN.md
-last_updated: "2026-03-19T13:17:16.061Z"
+stopped_at: Completed 02.1-05-PLAN.md
+last_updated: "2026-03-19T17:09:39.724Z"
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 22
-  completed_plans: 20
+  completed_plans: 21
 ---
 
 # Project State
@@ -64,6 +64,7 @@ Plan: 1 of 6
 | Phase 02.1 P03 | 2 | 3 tasks | 3 files |
 | Phase 02.1 P02 | 5 | 2 tasks | 1 files |
 | Phase 02.1 P04 | 127 | 2 tasks | 2 files |
+| Phase 02.1 P05 | 15 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -119,6 +120,8 @@ Recent decisions affecting current work:
 - [Phase 02.1]: Notes icon button placed in RSB collapsed rail after finance button — matches existing rsb-rail-icon pattern
 - [Phase 02.1]: notes-dashboard uses z-index 150 — between finance panel (z-index 200) and main content
 - [Phase 02.1]: Card color tints use literal rgba() values (not CSS variables) for consistent rendering — same approach as Chart.js colors
+- [Phase 02.1]: notesUI.init() + startReminderPolling() called in startApp() after financeUI.init() — both model-independent
+- [Phase 02.1]: Post-chat notesUI.refresh() is unconditional — simpler and safe since GET /notes/list is lightweight
 
 ### Roadmap Evolution
 
@@ -142,6 +145,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T13:17:16.059Z
-Stopped at: Completed 02.1-04-PLAN.md
+Last session: 2026-03-19T17:09:39.721Z
+Stopped at: Completed 02.1-05-PLAN.md
 Resume file: None
