@@ -1449,3 +1449,421 @@ body.app-ready #frt-overlay { display: none !important; }
 }
 
 /* === END FINANCE PANEL === */
+
+/* =========================================================
+   NOTES AND REMINDERS (Phase 02.1)
+   ========================================================= */
+
+/* --- Notes Dashboard Overlay --- */
+.notes-dashboard {
+    position: fixed;
+    inset: 0;
+    z-index: 150;
+    background: rgba(0, 0, 0, 0.95);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.notes-dashboard.hidden {
+    display: none;
+}
+
+.notes-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24px 32px 16px 32px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+}
+
+.notes-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary, #ffffff);
+    margin: 0;
+}
+
+.notes-close-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    color: rgba(255, 255, 255, 0.5);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+
+.notes-close-btn:hover {
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* --- Notes Grid (Masonry-style auto-fill) --- */
+.notes-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 16px;
+    padding: 24px 32px;
+    overflow-y: auto;
+    align-content: start;
+}
+
+/* Ghost scrollbar for notes grid */
+.notes-grid::-webkit-scrollbar {
+    width: 3px;
+}
+.notes-grid::-webkit-scrollbar-track {
+    background: transparent;
+}
+.notes-grid::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 2px;
+}
+.notes-grid:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* --- Note Card Base --- */
+.note-card {
+    padding: 16px;
+    border-radius: 12px;
+    backdrop-filter: var(--glass-filter, blur(24px) saturate(180%));
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: box-shadow 0.2s ease, background 0.15s ease;
+    position: relative;
+    min-height: 100px;
+    word-wrap: break-word;
+}
+
+.note-card:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* --- Card Color Tints (6 Midnight Glass tints) --- */
+/* All use rgba with backdrop-filter for glass effect — no CSS variables, consistent rendering */
+.note-card.card-color-default {
+    background: rgba(15, 15, 15, 0.5);
+}
+.note-card.card-color-deep-blue {
+    background: rgba(30, 58, 138, 0.35);
+    border-color: rgba(96, 165, 250, 0.2);
+}
+.note-card.card-color-dark-teal {
+    background: rgba(20, 84, 92, 0.35);
+    border-color: rgba(45, 212, 191, 0.2);
+}
+.note-card.card-color-amber-night {
+    background: rgba(120, 53, 15, 0.35);
+    border-color: rgba(251, 191, 36, 0.2);
+}
+.note-card.card-color-rose-night {
+    background: rgba(108, 28, 55, 0.35);
+    border-color: rgba(251, 113, 133, 0.2);
+}
+.note-card.card-color-mauve-glass {
+    background: rgba(76, 29, 149, 0.35);
+    border-color: rgba(196, 181, 253, 0.2);
+}
+
+/* --- Pinned cards (visual priority — no reorder, just subtle indicator) --- */
+.note-card.card-pinned {
+    border-top: 2px solid rgba(90, 140, 255, 0.5);
+}
+
+/* --- Overdue Reminder: Amber pulse animation --- */
+.note-card.card-overdue-pulse {
+    border-color: rgba(245, 158, 11, 0.5);
+    animation: pulse-overdue 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-overdue {
+    0%, 100% {
+        box-shadow: 0 4px 16px rgba(245, 158, 11, 0.25);
+    }
+    50% {
+        box-shadow: 0 4px 24px rgba(245, 158, 11, 0.55);
+    }
+}
+
+/* --- Card Content --- */
+.card-text {
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--text-primary, #ffffff);
+    white-space: pre-wrap;
+}
+
+/* --- Reminder Due Date Badge --- */
+.card-due {
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(161, 161, 170, 0.85);
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.note-card.card-overdue-pulse .card-due {
+    color: rgba(251, 191, 36, 0.9);
+}
+
+/* --- Overdue badge label --- */
+.card-overdue-badge {
+    font-size: 10px;
+    font-weight: 600;
+    background: rgba(245, 158, 11, 0.2);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: rgba(251, 191, 36, 0.9);
+    padding: 1px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* --- Card Controls (trash icon — visible on hover) --- */
+.card-controls {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: none;
+    gap: 4px;
+    align-items: center;
+}
+
+.note-card:hover .card-controls {
+    display: flex;
+}
+
+.btn-card-delete {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 14px;
+    line-height: 1;
+    transition: color 0.15s ease, background 0.15s ease;
+    display: flex;
+    align-items: center;
+}
+
+.btn-card-delete:hover {
+    color: rgba(255, 80, 80, 0.9);
+    background: rgba(255, 80, 80, 0.1);
+}
+
+/* --- Inline Edit Textarea --- */
+.card-textarea {
+    width: 100%;
+    min-height: 80px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--accent-primary, #5A8CFF);
+    border-radius: 6px;
+    color: var(--text-primary, #ffffff);
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 8px;
+    resize: vertical;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(90, 140, 255, 0.25);
+}
+
+/* --- Create Card (dashed empty card) --- */
+.note-card-create {
+    background: transparent;
+    border: 2px dashed rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 80px;
+    cursor: text;
+    transition: border-color 0.2s ease;
+}
+
+.note-card-create:hover {
+    border-color: rgba(255, 255, 255, 0.35);
+    box-shadow: none;
+}
+
+.notes-create-placeholder {
+    font-size: 14px;
+    color: rgba(161, 161, 170, 0.6);
+    pointer-events: none;
+    user-select: none;
+}
+
+.note-card-create.editing {
+    align-items: stretch;
+    justify-content: stretch;
+    padding: 8px;
+    border-color: rgba(90, 140, 255, 0.5);
+}
+
+.note-card-create.editing .notes-create-placeholder {
+    display: none;
+}
+
+.notes-create-textarea {
+    width: 100%;
+    min-height: 80px;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-primary, #ffffff);
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 0;
+    resize: none;
+}
+
+/* --- Empty State --- */
+.notes-empty {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+}
+
+.notes-empty.hidden {
+    display: none;
+}
+
+.notes-empty-heading {
+    font-size: 18px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.4);
+    margin: 0 0 8px 0;
+}
+
+.notes-empty-body {
+    font-size: 13px;
+    color: rgba(161, 161, 170, 0.5);
+    max-width: 400px;
+    line-height: 1.5;
+    margin: 0;
+}
+
+/* --- Notes Badge on RSB icon --- */
+.notes-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: #F59E0B;
+    color: #000000;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    line-height: 1;
+}
+
+.notes-badge.hidden {
+    display: none;
+}
+
+/* RSB icon button must be position: relative for badge to position correctly */
+#btn-notes-open {
+    position: relative;
+}
+
+/* --- Undo Delete Toast --- */
+.toast-undo {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-panel, rgba(15, 15, 15, 0.85));
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: var(--glass-filter, blur(24px) saturate(180%));
+    padding: 12px 20px;
+    border-radius: 8px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    z-index: 1000;
+    font-size: 13px;
+    color: var(--text-primary, #ffffff);
+    animation: toast-slide-up 0.25s ease;
+}
+
+.toast-undo .btn-undo {
+    background: var(--accent-primary, #5A8CFF);
+    color: #ffffff;
+    border: none;
+    padding: 4px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: opacity 0.15s ease;
+}
+
+.toast-undo .btn-undo:hover {
+    opacity: 0.85;
+}
+
+.toast-undo .btn-dismiss {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 4px 8px;
+    transition: color 0.15s ease;
+}
+
+.toast-undo .btn-dismiss:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+@keyframes toast-slide-up {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* --- Responsive breakpoints --- */
+@media (max-width: 1079px) {
+    .notes-grid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+        padding: 16px 20px;
+    }
+}
+
+@media (max-width: 767px) {
+    .notes-grid {
+        grid-template-columns: 1fr;
+        padding: 12px 16px;
+    }
+    .notes-header {
+        padding: 16px 20px 12px 20px;
+    }
+}
+
+/* === END NOTES AND REMINDERS === */
