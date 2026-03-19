@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Phase 02.1 context gathered
-last_updated: "2026-03-19T12:32:24.272Z"
+stopped_at: Completed 02.1-01-PLAN.md
+last_updated: "2026-03-19T13:07:44.075Z"
 progress:
   total_phases: 7
   completed_phases: 2
-  total_plans: 16
-  completed_plans: 16
+  total_plans: 22
+  completed_plans: 17
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** A local AI assistant that feels finished — polished, private, and powerful enough to prefer over ChatGPT
-**Current focus:** Phase 02 — financial-advisor
+**Current focus:** Phase 02.1 — notes-and-reminders-voice-triggered-google-keep-style-notepad-with-timed-reminder-pings
 
 ## Current Position
 
-Phase: 02 (financial-advisor) — EXECUTING
-Plan: 1 of 10
+Phase: 02.1 (notes-and-reminders-voice-triggered-google-keep-style-notepad-with-timed-reminder-pings) — EXECUTING
+Plan: 1 of 6
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Plan: 1 of 10
 | Phase 02-financial-advisor P08 | 198 | 2 tasks | 2 files |
 | Phase 02-financial-advisor P09 | 6 | 2 tasks | 3 files |
 | Phase 02-financial-advisor P10 | 2 | 2 tasks | 1 files |
+| Phase 02.1 P01 | 2 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,9 @@ Recent decisions affecting current work:
 - [Phase 02-financial-advisor]: Literal hex and rgba() values used in Chart.js config — Chart.js does not resolve CSS custom properties
 - [Phase 02-financial-advisor]: renderBudgetSidebar added as separate function targeting #fin-budget-sidebar-rows (sidebar) while renderBudgetActual kept for hidden #fin-budget-chart div — class names differ (fin-budget-fill vs fin-bar-fill)
 - [Phase 02-financial-advisor]: renderTransactions uses createElement/appendChild (not innerHTML map) so month-header click event listeners are preserved after DOM insertion
+- [Phase 02.1]: SQLite partial index WHERE clause dropped — used plain index ON notes(due_at, dismissed) for cross-version compatibility
+- [Phase 02.1]: Hard delete for DELETE /notes/{id}; dismissed=1 only for reminder lifecycle (not note deletion)
+- [Phase 02.1]: Notes module follows register_*(app, db_path) pattern from finance.py — same _db(request) helper pattern
 
 ### Roadmap Evolution
 
@@ -128,6 +132,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T12:32:24.270Z
-Stopped at: Phase 02.1 context gathered
-Resume file: .planning/phases/02.1-notes-and-reminders-voice-triggered-google-keep-style-notepad-with-timed-reminder-pings/02.1-CONTEXT.md
+Last session: 2026-03-19T13:07:44.073Z
+Stopped at: Completed 02.1-01-PLAN.md
+Resume file: None
