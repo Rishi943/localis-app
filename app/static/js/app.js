@@ -5457,7 +5457,7 @@ function buildSearchDetailHTML(results) {
           <div>
             <div class="tool-detail-rtitle">${escapeHtml(r.title || '')}</div>
             <div class="tool-detail-rsnip">${escapeHtml((r.snippet || '').slice(0, 120))}…</div>
-            <div class="tool-detail-rdomain mono">${escapeHtml(r.url ? new URL(r.url).hostname : '')}</div>
+            <div class="tool-detail-rdomain mono">${escapeHtml(r.url ? (() => { try { return new URL(r.url).hostname; } catch { return r.url; } })() : '')}</div>
           </div>
         </div>`).join('');
 }
