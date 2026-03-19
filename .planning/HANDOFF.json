@@ -1,0 +1,44 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-03-19T22:19:40.171Z",
+  "phase": "UI-redesign-brainstorm",
+  "phase_name": "Chat UI Redesign — Brainstorm Complete",
+  "phase_dir": ".planning/phases/UI-redesign-brainstorm",
+  "plan": 1,
+  "task": 2,
+  "total_tasks": 3,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Brainstorming session with visual companion — all components approved", "status": "done"}
+  ],
+  "remaining_tasks": [
+    {"id": 2, "name": "Write design spec to docs/superpowers/specs/2026-03-19-chat-ui-redesign.md", "status": "not_started"},
+    {"id": 3, "name": "Invoke writing-plans skill to create implementation plan", "status": "not_started"}
+  ],
+  "blockers": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {"decision": "Input layout: Action Cluster above pill (Option C)", "rationale": "User chose — tools+voice grouped in labeled cluster, pill stays minimal"},
+    {"decision": "LSB collapsed: Icon strip 64px (Option A)", "rationale": "User chose — mirrors RSB, brand icon + nav icons + model status"},
+    {"decision": "RSB: Single combined scrollable panel", "rationale": "User chose — all 4 sections (HA, Model, Prompt, Stats) in one panel with snap-scroll from collapsed icons"},
+    {"decision": "RSB collapsed shows exactly 4 icons: HA, Model, Finance, Notes", "rationale": "User specified explicitly"},
+    {"decision": "Finance and Notes open full-screen overlays, not inline panels", "rationale": "User confirmed existing behavior retained"},
+    {"decision": "Model dropdown is collapsible with chevron", "rationale": "User requested — arrow rotates on open/close"},
+    {"decision": "System prompt chips in 2x2 grid", "rationale": "User requested — fixes staggered chip layout"},
+    {"decision": "Tool cards are collapsible pills", "rationale": "User confirmed — pill toggles detail card, collapsed by default for older messages"},
+    {"decision": "Voice status bar only visible when wakeword ON", "rationale": "User confirmed explicitly"},
+    {"decision": "Close/collapse = chevron_right, back = chevron_left, consistent everywhere", "rationale": "User requested consistency"}
+  ],
+  "uncommitted_files": [
+    ".superpowers/brainstorm/289037-1773955673/input-layout.html",
+    ".superpowers/brainstorm/289037-1773955673/lsb-collapsed.html",
+    ".superpowers/brainstorm/289037-1773955673/rsb-panels.html",
+    ".superpowers/brainstorm/289037-1773955673/rsb-combined.html",
+    ".superpowers/brainstorm/289037-1773955673/rsb-v2.html",
+    ".superpowers/brainstorm/289037-1773955673/chat-messages-v2.html",
+    ".superpowers/brainstorm/289037-1773955673/full-layout.html",
+    ".planning/phases/UI-redesign-brainstorm/.continue-here.md"
+  ],
+  "next_action": "Write design spec to docs/superpowers/specs/2026-03-19-chat-ui-redesign.md — all decisions are in .continue-here.md decisions_made section. Do NOT restart brainstorming.",
+  "context_notes": "Pure design session, no code changed. User approved all mockups enthusiastically. Visual companion server may still be running on port 55007. Mockups are the source of truth for visual decisions."
+}
