@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 02.1-02-PLAN.md
-last_updated: "2026-03-19T13:12:54.068Z"
+stopped_at: Completed 02.1-04-PLAN.md
+last_updated: "2026-03-19T13:17:16.061Z"
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 22
-  completed_plans: 19
+  completed_plans: 20
 ---
 
 # Project State
@@ -63,6 +63,7 @@ Plan: 1 of 6
 | Phase 02.1 P01 | 2 | 3 tasks | 3 files |
 | Phase 02.1 P03 | 2 | 3 tasks | 3 files |
 | Phase 02.1 P02 | 5 | 2 tasks | 1 files |
+| Phase 02.1 P04 | 127 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -115,6 +116,9 @@ Recent decisions affecting current work:
 - [Phase 02.1]: chime.mp3 generated as true MPEG ADTS via ffmpeg libmp3lame (880 Hz A5, exponential decay, 0.5s)
 - [Phase 02.1]: notes.add/notes.retrieve access SQLite directly via database.DB_NAME — no HTTP hop to /notes/add endpoint
 - [Phase 02.1]: NOTES_TOOL_SCHEMAS defined as module-level constant in main.py — canonical schema reference for future LLM router integration
+- [Phase 02.1]: Notes icon button placed in RSB collapsed rail after finance button — matches existing rsb-rail-icon pattern
+- [Phase 02.1]: notes-dashboard uses z-index 150 — between finance panel (z-index 200) and main content
+- [Phase 02.1]: Card color tints use literal rgba() values (not CSS variables) for consistent rendering — same approach as Chart.js colors
 
 ### Roadmap Evolution
 
@@ -138,6 +142,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T13:12:54.066Z
-Stopped at: Completed 02.1-02-PLAN.md
+Last session: 2026-03-19T13:17:16.059Z
+Stopped at: Completed 02.1-04-PLAN.md
 Resume file: None
