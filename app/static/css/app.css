@@ -1216,6 +1216,7 @@ body.app-ready #frt-overlay { display: none !important; }
     border-bottom: 1px solid var(--border-subtle);
     flex-shrink: 0;
     min-height: 220px;
+    max-height: 220px;
 }
 .fin-line-chart-wrap {
     flex: 1;
@@ -1228,7 +1229,9 @@ body.app-ready #frt-overlay { display: none !important; }
 }
 .fin-donut-chart-wrap {
     flex: 0 0 220px;
+    height: 180px;
     min-height: 180px;
+    max-height: 180px;
     position: relative;
     display: flex;
     flex-direction: column;
