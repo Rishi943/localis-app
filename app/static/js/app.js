@@ -3983,56 +3983,81 @@ const modePills = (() => {
 
   function toggleLeft() {
     if (!lsb) return;
-    const collapsed = lsb.classList.toggle('collapsed');
+    const lRail = document.getElementById('left-rail');
+    const isNowHidden = lsb.classList.toggle('hidden'); // hide sidebar → show rail
+    if (lRail) lRail.classList.toggle('hidden', !isNowHidden); // rail visible when sidebar hidden
     const btn = document.getElementById('left-sidebar-toggle');
     if (btn) {
       const use = btn.querySelector('use');
-      if (use) use.setAttribute('href', collapsed ? '#ico-right' : '#ico-left');
+      if (use) use.setAttribute('href', isNowHidden ? '#ico-right' : '#ico-left');
     }
-    // Show/hide left rail
-    const lRail = document.getElementById('left-rail');
-    if (lRail) lRail.classList.toggle('hidden', !collapsed);
   }
 
-  function toggleRight() {
-    if (!rsb) return;
-    const collapsed = rsb.classList.toggle('collapsed');
-    if (rsbRail) rsbRail.classList.toggle('hidden', !collapsed);
-    const btn = document.getElementById('right-sidebar-toggle');
+  // Expand from collapsed rail: show sidebar, hide rail
+  function expandLeft() {
+    if (!lsb) return;
+    const lRail = document.getElementById('left-rail');
+    lsb.classList.remove('hidden');
+    if (lRail) lRail.classList.add('hidden');
+    const btn = document.getElementById('left-sidebar-toggle');
     if (btn) {
       const use = btn.querySelector('use');
-      if (use) use.setAttribute('href', collapsed ? '#ico-left' : '#ico-right');
+      if (use) use.setAttribute('href', '#ico-left');
     }
+  }
+
+  function openRsb() {
+    if (!rsb) return;
+    rsb.classList.remove('hidden');
+    state.rightSidebarOpen = true;
+  }
+
+  function closeRsb() {
+    if (!rsb) return;
+    rsb.classList.add('hidden');
+    state.rightSidebarOpen = false;
+    // Clear active state on all rail icons
+    document.querySelectorAll('.rsb-rail-icon').forEach(b => b.classList.remove('active'));
+  }
+
+  // Keep toggleRight for any legacy callers
+  function toggleRight() {
+    if (!rsb) return;
+    if (rsb.classList.contains('hidden')) openRsb(); else closeRsb();
   }
 
   const lBtn = document.getElementById('left-sidebar-toggle');
+  // #right-sidebar-toggle is the chevron INSIDE the panel — it closes the panel
   const rBtn = document.getElementById('right-sidebar-toggle');
   const rRailBtn = document.getElementById('right-rail-toggle');
   if (lBtn) lBtn.addEventListener('click', toggleLeft);
-  if (rBtn) rBtn.addEventListener('click', toggleRight);
+  if (rBtn) rBtn.addEventListener('click', closeRsb);
   if (rRailBtn) rRailBtn.addEventListener('click', toggleRight);
 
+  // The foot icon in the rail (#btn-right-sidebar-toggle) opens the panel
+  document.getElementById('btn-right-sidebar-toggle')?.addEventListener('click', openRsb);
+
   // LSB rail buttons
-  document.getElementById('left-sidebar-expand')?.addEventListener('click', toggleLeft);
+  document.getElementById('left-sidebar-expand')?.addEventListener('click', expandLeft);
   document.getElementById('lsb-rail-new-chat')?.addEventListener('click', () =>
       document.getElementById('btn-new-chat')?.click());
   document.getElementById('lsb-rail-settings')?.addEventListener('click', () =>
       window.openSettingsModal ? window.openSettingsModal() : toggleSettings(true));
 
-  // Rail icons → expand sidebar AND scroll to target section
+  // Rail icons → open panel, set active, scroll to target section
   document.querySelectorAll('.rsb-rail-icon').forEach(btn => {
     btn.addEventListener('click', () => {
       const sectionId = btn.dataset.section;
       if (!sectionId) return;
-      // Reuse existing toggleRight() to expand — it handles icon swap + rail hide
-      if (rsb && rsb.classList.contains('collapsed')) {
-        toggleRight();
-      }
+      // Open the panel
+      openRsb();
+      // Set this icon as active, clear siblings
+      document.querySelectorAll('.rsb-rail-icon').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
       // Scroll after transition completes (~200ms)
       setTimeout(() => {
         const section = document.getElementById(sectionId);
-        const body = document.getElementById('rsb-body');
-        if (section && body) {
+        if (section) {
           section.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       }, 220);
