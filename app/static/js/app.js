@@ -1603,12 +1603,6 @@ const els = {
     rsbLightsToggle: document.getElementById('rsb-lights-toggle'),
     rsbLightsPct:    document.getElementById('rsb-lights-pct'),
     rsbLightsAgo:    document.getElementById('rsb-lights-ago'),
-    rsbBulbBody:         document.getElementById('rsb-bulb-body'),
-    rsbBulbGlow:         document.getElementById('rsb-bulb-glow'),
-    rsbBulbGraphicBody:  document.getElementById('rsb-bulb-graphic-body'),
-    rsbBulbGraphicGlow:  document.getElementById('rsb-bulb-graphic-glow'),
-    rsbBulbWrap:         document.getElementById('rsb-bulb-wrap'),
-    rsbBulbIc:           document.getElementById('btn-rail-ha'),
     rsbModelName:    document.getElementById('rsb-model-name'),
     rsbModelStatus:  document.getElementById('rsb-model-status'),
     rsbModelChips:   document.getElementById('rsb-model-chips'),
@@ -3992,8 +3986,8 @@ const modePills = (() => {
     if (lRail) lRail.classList.toggle('hidden', !isNowHidden); // rail visible when sidebar hidden
     const btn = document.getElementById('left-sidebar-toggle');
     if (btn) {
-      const use = btn.querySelector('use');
-      if (use) use.setAttribute('href', isNowHidden ? '#ico-right' : '#ico-left');
+      const span = btn.querySelector('span.ms');
+      if (span) span.textContent = isNowHidden ? 'chevron_right' : 'chevron_left';
     }
   }
 
@@ -4005,8 +3999,8 @@ const modePills = (() => {
     if (lRail) lRail.classList.add('hidden');
     const btn = document.getElementById('left-sidebar-toggle');
     if (btn) {
-      const use = btn.querySelector('use');
-      if (use) use.setAttribute('href', '#ico-left');
+      const span = btn.querySelector('span.ms');
+      if (span) span.textContent = 'chevron_left';
     }
   }
 
