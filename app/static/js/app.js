@@ -1560,11 +1560,13 @@ const els = {
     connStatus: document.getElementById('conn-status'),
     rightSidebar: document.getElementById('right-sidebar'),
     rightRail: document.getElementById('right-rail'),
+    rightSidebarToggle: document.getElementById('right-sidebar-toggle'),
     btnOpenSettings: document.getElementById('btn-right-sidebar-toggle') || document.getElementById('btn-open-settings-sidebar') || document.getElementById('btn-open-settings-rail'),
     btnOpenSettingsSidebar: document.getElementById('btn-open-settings-sidebar'),
     btnOpenSettingsRail: document.getElementById('btn-open-settings-rail'),
     btnCloseSettings: document.getElementById('btn-close-settings'),
-    sidebar: document.getElementById('sidebar'),
+    sidebar: document.getElementById('left-sidebar'),
+    rail: document.getElementById('left-rail'),
     btnSidebarToggle: document.getElementById('btn-sidebar-toggle'),
     memMatrixContainer: document.getElementById('memory-matrix-container'),
     webUplinkContainer: document.getElementById('web-uplink-container'),
@@ -1601,8 +1603,12 @@ const els = {
     rsbLightsToggle: document.getElementById('rsb-lights-toggle'),
     rsbLightsPct:    document.getElementById('rsb-lights-pct'),
     rsbLightsAgo:    document.getElementById('rsb-lights-ago'),
-    rsbBulbFill:     document.getElementById('rsb-bulb-fill'),
-    rsbBulbLine:     document.getElementById('rsb-bulb-line'),
+    rsbBulbBody:         document.getElementById('rsb-bulb-body'),
+    rsbBulbGlow:         document.getElementById('rsb-bulb-glow'),
+    rsbBulbGraphicBody:  document.getElementById('rsb-bulb-graphic-body'),
+    rsbBulbGraphicGlow:  document.getElementById('rsb-bulb-graphic-glow'),
+    rsbBulbWrap:         document.getElementById('rsb-bulb-wrap'),
+    rsbBulbIc:           document.getElementById('btn-rail-ha'),
     rsbModelName:    document.getElementById('rsb-model-name'),
     rsbModelStatus:  document.getElementById('rsb-model-status'),
     rsbModelChips:   document.getElementById('rsb-model-chips'),
@@ -1612,10 +1618,6 @@ const els = {
     rsbRamBar:       document.getElementById('rsb-ram-bar'),
     rsbVramVal:      document.getElementById('rsb-vram-val'),
     rsbVramBar:      document.getElementById('rsb-vram-bar'),
-    rsbCtxAscii:     document.getElementById('rsb-ctx-ascii'),
-    rsbCtxTokens:    document.getElementById('rsb-ctx-tokens'),
-    rsbCtxPct:       document.getElementById('rsb-ctx-pct'),
-    rsbBulb:             document.getElementById('rsb-bulb'),
     rsbBrightnessCtrl:   document.getElementById('rsb-brightness-ctrl'),
     rsbBrightnessSlider: document.getElementById('rsb-brightness-slider'),
     rsbKelvinCtrl:       document.getElementById('rsb-kelvin-ctrl'),
@@ -1628,11 +1630,9 @@ const els = {
     modalSystemPrompt:     document.getElementById('system-prompt-modal-editor'),
     btnEditPromptSidebar:  document.getElementById('btn-edit-prompt-sidebar'),
     leftSidebarToggle:     document.getElementById('left-sidebar-toggle'),
-    rightSidebarToggle:    document.getElementById('right-sidebar-toggle'),
     tbModelName:           document.getElementById('tb-model-name'),
     btnTopSettings:        document.getElementById('btn-top-settings'),
     chatZone:              document.getElementById('chat-zone'),
-    tokenEstimate:         document.getElementById('token-estimate'),
     welcomeState:          document.getElementById('welcome-state'),
 };
 
@@ -4017,7 +4017,7 @@ const modePills = (() => {
   document.getElementById('lsb-rail-new-chat')?.addEventListener('click', () =>
       document.getElementById('btn-new-chat')?.click());
   document.getElementById('lsb-rail-settings')?.addEventListener('click', () =>
-      toggleSettings(true));
+      window.openSettingsModal ? window.openSettingsModal() : toggleSettings(true));
 
   // Rail icons → expand sidebar AND scroll to target section
   document.querySelectorAll('.rsb-rail-icon').forEach(btn => {
@@ -4120,9 +4120,14 @@ const rsbLights = (() => {
       _setActiveControl('kelvin');
     });
 
-    // Toggle switch (on/off)
+    // Toggle switch (on/off) — optimistic UI: flip visual immediately, then call HA
     els.rsbLightsToggle?.addEventListener('click', async () => {
-      try { await _haPost('/assist/light/toggle'); setTimeout(_refresh, 400); } catch (_) {}
+      const isNowOn = !els.rsbLightsToggle.classList.contains('on');
+      els.rsbLightsToggle.classList.toggle('on', isNowOn);
+      els.rsbBulb?.classList.toggle('lit', isNowOn);
+      if (els.rsbBulbFill) els.rsbBulbFill.style.height = isNowOn ? '50%' : '0%';
+      if (els.rsbLightsPct) els.rsbLightsPct.textContent = isNowOn ? '50%' : 'Off';
+      try { await _haPost('/assist/light/toggle'); setTimeout(_refresh, 600); } catch (_) {}
     });
 
     // Brightness slider — debounced HA call
@@ -4156,6 +4161,8 @@ const rsbLights = (() => {
         const b = parseInt(hex.slice(5, 7), 16);
         document.querySelectorAll('#rsb-swatches .rsb-sw').forEach(s => s.classList.remove('selected'));
         swatch.classList.add('selected');
+        // Optimistic: update bulb fill color immediately
+        if (els.rsbBulbFill) els.rsbBulbFill.style.background = `linear-gradient(180deg, rgba(${r},${g},${b},0.38) 0%, rgba(${r},${g},${b},0.88) 100%)`;
         try { await _haPost('/assist/light/color', { rgb: [r, g, b] }); setTimeout(_refresh, 600); } catch (_) {}
       });
     });
@@ -5195,7 +5202,7 @@ if (els.btnTopSettings) {
     });
 }
 // LSB footer gear (collapsed state) opens right sidebar (legacy behaviour preserved)
-document.getElementById('btn-lsb-settings')?.addEventListener('click', () => toggleSettings(true));
+document.getElementById('btn-lsb-settings')?.addEventListener('click', () => { if (window.openSettingsModal) window.openSettingsModal(); });
 
 // ── App Settings Modal (new full-page settings overlay) ─────────────────────
 (function initSettingsModal() {
@@ -5284,6 +5291,16 @@ document.getElementById('btn-lsb-settings')?.addEventListener('click', () => tog
 
 // ── Settings Save ────────────────────────────────────────────────────────────
 async function saveSettings() {
+    // Upload wallpaper if a file was selected
+    const wallFile = document.getElementById('set-wallpaper')?.files?.[0];
+    if (wallFile) {
+        const fd = new FormData();
+        fd.append('file', wallFile);
+        try {
+            const r = await fetch('/settings/wallpaper', { method: 'POST', body: fd });
+            if (r.ok) { const d = await r.json(); setWallpaperUrl(d.url); }
+        } catch(e) {}
+    }
     const payload = {
         accent_color: document.getElementById('set-accent')?.value || '#5A8CFF',
         wallpaper_opacity: parseFloat(document.getElementById('set-wall-opacity')?.value || 0.3),
