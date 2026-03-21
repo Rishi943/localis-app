@@ -42,7 +42,7 @@
   --font-mono: 'JetBrains Mono', monospace;
 
   /* Foundation */
-  --bg-app: #080808;
+  --bg-app: #000000;
 
   /* Glass panels */
   --bg-sidebar: rgba(10, 10, 10, 0.55);
@@ -55,7 +55,7 @@
   --glass-filter: blur(24px) saturate(180%);
 
   /* Borders */
-  --border-subtle:    rgba(255, 255, 255, 0.10);
+  --border-subtle:    rgba(255, 255, 255, 0.15);
   --border-highlight: rgba(255, 255, 255, 0.20);
   --border-inner:     rgba(255, 255, 255, 0.06);
 

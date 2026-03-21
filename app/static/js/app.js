@@ -3054,6 +3054,7 @@ const notesUI = (() => {
         _el.badge = document.querySelector('#notes-badge');
 
         _el.btnOpen?.addEventListener('click', () => open());
+        document.getElementById('btn-notes-rsb')?.addEventListener('click', () => open());
         _el.btnClose?.addEventListener('click', () => close());
 
         _el.dashboard?.addEventListener('keydown', (e) => {
@@ -4153,10 +4154,7 @@ const rsbLights = (() => {
 
       if (els.rsbLightsPct)   els.rsbLightsPct.textContent = isOn ? `${pct}%` : 'Off';
       if (els.rsbLightsAgo)   els.rsbLightsAgo.textContent = _msSince(data.last_changed);
-      if (els.rsbBulbFill)    els.rsbBulbFill.style.height  = isOn ? `${pct}%` : '0%';
-      if (els.rsbBulbLine)    els.rsbBulbLine.style.bottom  = `calc(${isOn ? pct : 0}% + 5px)`;
       if (els.rsbLightsToggle) els.rsbLightsToggle.classList.toggle('on', isOn);
-      if (els.rsbBulb)         els.rsbBulb.classList.toggle('lit', isOn);
       if (els.rsbBrightnessSlider && isOn) els.rsbBrightnessSlider.value = pct;
       _applyBulbColor(colorHex, pct, isOn);
     } catch (_) {
@@ -4203,8 +4201,6 @@ const rsbLights = (() => {
     els.rsbLightsToggle?.addEventListener('click', async () => {
       const isNowOn = !els.rsbLightsToggle.classList.contains('on');
       els.rsbLightsToggle.classList.toggle('on', isNowOn);
-      els.rsbBulb?.classList.toggle('lit', isNowOn);
-      if (els.rsbBulbFill) els.rsbBulbFill.style.height = isNowOn ? '50%' : '0%';
       if (els.rsbLightsPct) els.rsbLightsPct.textContent = isNowOn ? '50%' : 'Off';
       const togglePct = parseInt(els.rsbBrightnessSlider?.value || 50);
       _applyBulbColor(null, isNowOn ? togglePct : 0, isNowOn);
@@ -4215,6 +4211,7 @@ const rsbLights = (() => {
     let _bTimer = null;
     els.rsbBrightnessSlider?.addEventListener('input', e => {
       if (els.rsbLightsPct) els.rsbLightsPct.textContent = `${e.target.value}%`;
+      _applyBulbColor(null, parseInt(e.target.value), true);
       clearTimeout(_bTimer);
       _bTimer = setTimeout(async () => {
         try { await _haPost('/assist/light/brightness', { value: parseInt(e.target.value) }); } catch (_) {}
@@ -4232,19 +4229,16 @@ const rsbLights = (() => {
     });
     els.rsbKelvinSlider?.addEventListener('change', () => setTimeout(_refresh, 500));
 
-    // Color swatches — use class .rsb-sw (the actual class name in HTML)
-    document.querySelectorAll('#rsb-swatches .rsb-sw').forEach(swatch => {
+    // Color swatches
+    document.querySelectorAll('#rsb-color-swatches .swatch').forEach(swatch => {
       swatch.addEventListener('click', async () => {
         const hex = swatch.dataset.color;
         if (!hex) return;
         const r = parseInt(hex.slice(1, 3), 16);
         const g = parseInt(hex.slice(3, 5), 16);
         const b = parseInt(hex.slice(5, 7), 16);
-        document.querySelectorAll('#rsb-swatches .rsb-sw').forEach(s => s.classList.remove('selected'));
+        document.querySelectorAll('#rsb-color-swatches .swatch').forEach(s => s.classList.remove('selected'));
         swatch.classList.add('selected');
-        // Optimistic: update bulb fill color immediately
-        if (els.rsbBulbFill) els.rsbBulbFill.style.background = `linear-gradient(180deg, rgba(${r},${g},${b},0.38) 0%, rgba(${r},${g},${b},0.88) 100%)`;
-        // Optimistic: sync SVG bulb color
         const currentPct = parseInt(els.rsbBrightnessSlider?.value || 50);
         _applyBulbColor(hex, currentPct, true);
         try { await _haPost('/assist/light/color', { rgb: [r, g, b] }); setTimeout(_refresh, 600); } catch (_) {}
@@ -4252,57 +4246,6 @@ const rsbLights = (() => {
     });
 
     _setActiveControl('brightness'); // default active mode
-
-    // ── Bulb direct drag for brightness ──────────────────────────────────────
-    let _bulbDragging = false;
-    let _bulbLastPct = 50;
-
-    function _bulbPctFromEvent(clientY) {
-      if (!els.rsbBulb) return 50;
-      const rect = els.rsbBulb.getBoundingClientRect();
-      return Math.max(0, Math.min(100, Math.round((1 - (clientY - rect.top) / rect.height) * 100)));
-    }
-
-    function _bulbUpdateUI(pct) {
-      if (els.rsbBulbFill)  els.rsbBulbFill.style.height  = `${pct}%`;
-      if (els.rsbBulbLine)  els.rsbBulbLine.style.bottom   = `calc(${pct}% + 5px)`;
-      if (els.rsbLightsPct) els.rsbLightsPct.textContent   = `${pct}%`;
-      if (els.rsbBrightnessSlider) els.rsbBrightnessSlider.value = pct;
-      _bulbLastPct = pct;
-    }
-
-    els.rsbBulb?.addEventListener('mousedown', e => {
-      _bulbDragging = true;
-      _bulbUpdateUI(_bulbPctFromEvent(e.clientY));
-      e.preventDefault();
-    });
-    document.addEventListener('mousemove', e => {
-      if (!_bulbDragging) return;
-      _bulbUpdateUI(_bulbPctFromEvent(e.clientY));
-    });
-    document.addEventListener('mouseup', () => {
-      if (!_bulbDragging) return;
-      _bulbDragging = false;
-      _haPost('/assist/light/brightness', { value: _bulbLastPct }).catch(() => {});
-      setTimeout(_refresh, 600);
-    });
-
-    // Touch support
-    els.rsbBulb?.addEventListener('touchstart', e => {
-      _bulbDragging = true;
-      _bulbUpdateUI(_bulbPctFromEvent(e.touches[0].clientY));
-      e.preventDefault();
-    }, { passive: false });
-    document.addEventListener('touchmove', e => {
-      if (!_bulbDragging) return;
-      _bulbUpdateUI(_bulbPctFromEvent(e.touches[0].clientY));
-    }, { passive: false });
-    document.addEventListener('touchend', () => {
-      if (!_bulbDragging) return;
-      _bulbDragging = false;
-      _haPost('/assist/light/brightness', { value: _bulbLastPct }).catch(() => {});
-      setTimeout(_refresh, 600);
-    });
   }
 
   function start() {
@@ -4480,17 +4423,7 @@ const rsbStats = (() => {
   }
 
   function updateContextBar() {
-    const nCtx = state.nCtx || 8192;
-    const tokenEst = Math.ceil(_ctxChars / 4);
-    const pct = Math.min(100, Math.round(tokenEst / nCtx * 100));
-
-    if (els.rsbCtxAscii) els.rsbCtxAscii.textContent = _ascii(pct);
-    if (els.rsbCtxTokens) {
-      const used = tokenEst.toLocaleString();
-      const max = nCtx.toLocaleString();
-      els.rsbCtxTokens.textContent = `${used} / ${max} tokens`;
-    }
-    if (els.rsbCtxPct) els.rsbCtxPct.textContent = `${pct}%`;
+    // Context bar elements removed in new design — no-op
   }
 
   function addChars(n) {
@@ -5559,31 +5492,6 @@ function buildSearchDetailHTML(results) {
         </div>`).join('');
 }
 
-// --- MESSAGE ACTION CHIPS ---
-// Appends Copy / Regenerate / Like icon buttons below a completed assistant message row.
-function addMessageActionChips(msgRowEl, plainText) {
-    const chips = document.createElement('div');
-    chips.className = 'msg-actions';
-    // Use inline SVGs — ico-copy/ico-refresh/ico-thumb-up are not in SVG defs
-    chips.innerHTML = `
-        <button class="msg-action-icon" data-action="copy" title="Copy">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        </button>
-        <button class="msg-action-icon" data-action="regen" title="Regenerate">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 .49-3"/></svg>
-        </button>
-        <button class="msg-action-icon" data-action="like" title="Helpful">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
-        </button>
-    `;
-    chips.querySelector('[data-action="copy"]').onclick = () =>
-        navigator.clipboard.writeText(plainText);
-    chips.querySelector('[data-action="regen"]').onclick = () =>
-        api.chat(state.lastUserMessage);
-    chips.querySelector('[data-action="like"]').onclick = (e) =>
-        e.currentTarget.classList.toggle('active');
-    msgRowEl.appendChild(chips);
-}
 
 // --- DATE GROUP SEPARATORS ---
 function groupMessagesByDate(messages) {
