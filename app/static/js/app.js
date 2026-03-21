@@ -4073,6 +4073,55 @@ const rsbLights = (() => {
   let _pollTimer = null;
   let _activeControl = 'brightness';
 
+  function _hexToRgb(hex) {
+    hex = hex.replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
+  }
+
+  function _applyBulbColor(color, brightness, isOn) {
+    const col = isOn ? (color || '#fb923c') : '#444444';
+    const [r, g, b] = _hexToRgb(col);
+    const pct = isOn ? (brightness || 0) : 0;
+    const bodyAlpha = isOn ? (0.3 + (pct / 100) * 0.65) : 0.08;
+    const glowAlpha = isOn ? (pct / 100 * 0.32) : 0;
+    const glowStr   = isOn ? pct / 100 : 0;
+    // icon (in rail)
+    const bulbBody = document.getElementById('rsb-bulb-body');
+    const bulbGlow = document.getElementById('rsb-bulb-glow');
+    bulbBody?.setAttribute('fill', col);
+    bulbBody?.setAttribute('fill-opacity', bodyAlpha.toFixed(2));
+    bulbGlow?.setAttribute('fill', col);
+    bulbGlow?.setAttribute('fill-opacity', glowAlpha.toFixed(2));
+    // graphic (in panel)
+    const bulbGraphicBody = document.getElementById('rsb-bulb-graphic-body');
+    const bulbGraphicGlow = document.getElementById('rsb-bulb-graphic-glow');
+    bulbGraphicBody?.setAttribute('fill', col);
+    bulbGraphicBody?.setAttribute('fill-opacity', bodyAlpha.toFixed(2));
+    bulbGraphicGlow?.setAttribute('fill', col);
+    bulbGraphicGlow?.setAttribute('fill-opacity', glowAlpha.toFixed(2));
+    // drop-shadow on graphic wrap
+    const bulbWrap = document.getElementById('rsb-bulb-wrap');
+    if (bulbWrap) {
+      const spread = isOn && pct > 5 ? 8 + pct * 0.35 : 0;
+      bulbWrap.style.filter = spread
+        ? `drop-shadow(0 0 ${spread}px rgba(${r},${g},${b},${(0.2 + glowStr * 0.55).toFixed(2)}))`
+        : 'none';
+    }
+    // icon container glow
+    const bulbIc = document.getElementById('btn-rail-ha');
+    if (bulbIc) {
+      bulbIc.style.boxShadow = isOn && pct > 8
+        ? `0 0 ${12 + pct * 0.2}px rgba(${r},${g},${b},${(0.15 + glowStr * 0.35).toFixed(2)})`
+        : 'none';
+    }
+  }
+
+  function _rgbArrayToHex(rgb) {
+    if (!Array.isArray(rgb) || rgb.length < 3) return null;
+    return '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join('');
+  }
+
   function _msSince(isoStr) {
     if (!isoStr) return '';
     const diff = Math.round((Date.now() - new Date(isoStr).getTime()) / 1000);
@@ -4100,6 +4149,7 @@ const rsbLights = (() => {
 
       const pct  = data.brightness_pct ?? 0;
       const isOn = data.state === 'on';
+      const colorHex = _rgbArrayToHex(data.rgb);
 
       if (els.rsbLightsPct)   els.rsbLightsPct.textContent = isOn ? `${pct}%` : 'Off';
       if (els.rsbLightsAgo)   els.rsbLightsAgo.textContent = _msSince(data.last_changed);
@@ -4108,6 +4158,7 @@ const rsbLights = (() => {
       if (els.rsbLightsToggle) els.rsbLightsToggle.classList.toggle('on', isOn);
       if (els.rsbBulb)         els.rsbBulb.classList.toggle('lit', isOn);
       if (els.rsbBrightnessSlider && isOn) els.rsbBrightnessSlider.value = pct;
+      _applyBulbColor(colorHex, pct, isOn);
     } catch (_) {
       _showUnavailable();
     }
@@ -4155,6 +4206,8 @@ const rsbLights = (() => {
       els.rsbBulb?.classList.toggle('lit', isNowOn);
       if (els.rsbBulbFill) els.rsbBulbFill.style.height = isNowOn ? '50%' : '0%';
       if (els.rsbLightsPct) els.rsbLightsPct.textContent = isNowOn ? '50%' : 'Off';
+      const togglePct = parseInt(els.rsbBrightnessSlider?.value || 50);
+      _applyBulbColor(null, isNowOn ? togglePct : 0, isNowOn);
       try { await _haPost('/assist/light/toggle'); setTimeout(_refresh, 600); } catch (_) {}
     });
 
@@ -4191,6 +4244,9 @@ const rsbLights = (() => {
         swatch.classList.add('selected');
         // Optimistic: update bulb fill color immediately
         if (els.rsbBulbFill) els.rsbBulbFill.style.background = `linear-gradient(180deg, rgba(${r},${g},${b},0.38) 0%, rgba(${r},${g},${b},0.88) 100%)`;
+        // Optimistic: sync SVG bulb color
+        const currentPct = parseInt(els.rsbBrightnessSlider?.value || 50);
+        _applyBulbColor(hex, currentPct, true);
         try { await _haPost('/assist/light/color', { rgb: [r, g, b] }); setTimeout(_refresh, 600); } catch (_) {}
       });
     });
@@ -6580,6 +6636,21 @@ const api = {
         // Hide welcome state on first message
         els.welcomeState?.classList.add('hidden');
         appendMessage('user', promptText);
+        // Attach user meta (time + estimated token count) to the last user row
+        {
+            const lastRow = els.chatHistory.lastElementChild;
+            if (lastRow && lastRow.classList.contains('user')) {
+                const msgBody = lastRow.querySelector('.msg-body');
+                if (msgBody) {
+                    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const inputTokens = Math.ceil(promptText.length / 4);
+                    const userMeta = document.createElement('div');
+                    userMeta.className = 'msg-user-meta';
+                    userMeta.innerHTML = `<span class="msg-time">${time}</span><span class="user-token-stat">↑ ${inputTokens} tokens</span>`;
+                    msgBody.appendChild(userMeta);
+                }
+            }
+        }
         els.prompt.value = ''; els.prompt.style.height = 'auto';
         if (els.tokenEstimate) els.tokenEstimate.textContent = '';
         state.isGenerating = true;
@@ -6749,31 +6820,30 @@ const api = {
                 assistantMsgEl.querySelectorAll('pre code').forEach((block) => hljs.highlightElement(block));
             }
 
-            // Add Copy / Regenerate / Continue action chips below the completed message
+            // Render footer (token stats + icon buttons) below the completed assistant message
             if (assistantMsgEl && !isTutorialChat) {
-                addMessageActionChips(assistantMsgEl, assistantMsgContent);
+                const msgBody = assistantMsgEl.querySelector('.msg-body');
+                if (msgBody) {
+                    const footer = document.createElement('div');
+                    footer.className = 'msg-footer';
+                    const tps = (lastStreamStats?.tokens_per_second || 0).toFixed(1);
+                    const outTok = lastStreamStats?.tokens_generated || '—';
+                    footer.innerHTML = `
+                        <span class="ai-token-stat">↓ ${outTok} tokens · ${tps} tok/s</span>
+                        <div style="flex:1"></div>
+                        <button class="footer-icon-btn" title="Copy"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                        <button class="footer-icon-btn" title="Regenerate"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 .49-3"/></svg></button>
+                    `;
+                    footer.querySelector('[title="Copy"]').addEventListener('click', () => {
+                        navigator.clipboard.writeText(assistantMsgContent).catch(() => {});
+                    });
+                    footer.querySelector('[title="Regenerate"]').addEventListener('click', () => {
+                        api.chat(state.lastUserMessage);
+                    });
+                    msgBody.appendChild(footer);
+                }
             }
-
-            // Render stats below the assistant message
-            if (lastStreamStats && msgDiv) {
-                const statsDiv = document.createElement('div');
-                statsDiv.className = 'msg-stats';
-                const tps = lastStreamStats.tokens_per_second?.toFixed(1) || '—';
-                const tokens = lastStreamStats.tokens_generated || '—';
-                const timeMs = lastStreamStats.generation_time_ms;
-                const timeSec = timeMs ? (timeMs / 1000).toFixed(1) + 's' : '—';
-                statsDiv.innerHTML = `
-                    <span>${tps} tok/s</span>
-                    <span>·</span>
-                    <span>${tokens} tokens</span>
-                    <span>·</span>
-                    <span>${timeSec}</span>
-                `;
-                // msgDiv is .msg-text; go up to .msg-body to append stats below prose
-                const messageParent = msgDiv?.parentElement || assistantMsgEl?.querySelector('.msg-body');
-                if (messageParent) messageParent.appendChild(statsDiv);
-            }
-            // If lastStreamStats is null (error/unavailable), just don't render anything — clean degradation
+            // If lastStreamStats is null (error/unavailable), footer shows 0.0 tok/s — clean degradation
 
             // Voice status: signal done for Home Control commands
             if (isAssistMode) {
