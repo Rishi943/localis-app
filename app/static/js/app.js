@@ -1578,7 +1578,7 @@ const els = {
     toolsPickerBtn: document.getElementById('tools-picker-btn'),
     toolsPickerModal: document.getElementById('tools-picker-modal'),
     toolsChipRow: document.getElementById('tools-chip-row'),
-    voiceMicBtn: document.getElementById('voice-mic-btn'),
+    voiceMicBtn: document.getElementById('voice-ptt-btn'),
     voiceModeToggle: document.getElementById('voice-mode-toggle'),
     voiceCancelBar: document.getElementById('voice-cancel-bar'),
     voiceCancelBtn: document.getElementById('voice-cancel-btn'),
@@ -3352,6 +3352,11 @@ const toolsUI = {
             });
         });
 
+        // Paperclip button in input pill triggers file picker
+        document.getElementById('btn-attach')?.addEventListener('click', () => {
+            document.getElementById('from-file-input')?.click();
+        });
+
         // File input handler for "From File" tool
         const fromFileInput = document.getElementById('from-file-input');
         if (fromFileInput) {
@@ -4427,6 +4432,7 @@ const rsbStats = (() => {
   }
 
   function start() {
+    if (_statsTimer) clearInterval(_statsTimer);
     _refreshStats();
     _statsTimer = setInterval(_refreshStats, 3000);
   }
@@ -5302,6 +5308,7 @@ document.getElementById('btn-lsb-settings')?.addEventListener('click', () => { i
 async function saveSettings() {
     // Upload wallpaper if a file was selected
     const wallFile = document.getElementById('set-wallpaper')?.files?.[0];
+    const wallOpacity = parseFloat(document.getElementById('set-wall-opacity')?.value ?? 0.3);
     if (wallFile) {
         const fd = new FormData();
         fd.append('file', wallFile);
@@ -5310,9 +5317,11 @@ async function saveSettings() {
             if (r.ok) { const d = await r.json(); setWallpaperUrl(d.url); }
         } catch(e) {}
     }
+    // Apply opacity immediately — elWall.layer defaults to 0.1 on load
+    elWall.layer.style.opacity = wallOpacity;
     const payload = {
         accent_color: document.getElementById('set-accent')?.value || '#5A8CFF',
-        wallpaper_opacity: parseFloat(document.getElementById('set-wall-opacity')?.value || 0.3),
+        wallpaper_opacity: wallOpacity,
         gpu_layers: parseInt(document.getElementById('set-gpu-layers')?.value || 35),
         context_size: parseInt(document.getElementById('set-ctx')?.value || 4096),
         active_profile: state.activeProfile || 'default',
@@ -5346,6 +5355,9 @@ async function loadSettings() {
         const s = await res.json();
         if (s.accent_color) {
             document.documentElement.style.setProperty('--accent-primary', s.accent_color);
+        }
+        if (s.wallpaper_opacity != null) {
+            elWall.layer.style.opacity = s.wallpaper_opacity;
         }
         if (s.custom_profile_prompt && PROFILE_MAP.custom) {
             PROFILE_MAP.custom.prompt = s.custom_profile_prompt;

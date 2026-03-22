@@ -330,6 +330,11 @@ def init_db():
         ON notes(due_at, dismissed)
     """)
 
+    # Indexes on hot query paths
+    c.execute("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_rag_files_session ON rag_files(session_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_fin_transactions_upload ON fin_transactions(upload_id)")
+
     # Seed tutorial flag ONLY if this is a fresh install (or recreated after backup)
     if is_new_db:
         now = datetime.utcnow().isoformat()
@@ -479,7 +484,8 @@ def get_extended_user_memories_with_meta() -> List[Dict[str, Any]]:
         FROM user_memory m
         LEFT JOIN user_memory_meta meta ON m.key = meta.key
         WHERE m.key NOT IN ({placeholders})
-        ORDER BY m.category, m.key
+        ORDER BY m.last_updated DESC
+        LIMIT 200
     """
     c.execute(sql, list(TIER_A_KEYS))
     rows = c.fetchall()

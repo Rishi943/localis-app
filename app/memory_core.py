@@ -664,9 +664,9 @@ def retrieve_vector_memory(query: str, k: int = 5) -> List[MemoryItem]:
         return []
 
     q_arr = np.array(query_vec, dtype=np.float32)
-    # Reduced from 2000 to 500 for performance
+    # Reduced from 2000 to 100 for performance
     # Most recent memories are typically most relevant
-    candidates = database.list_vector_memory_items(limit=500)
+    candidates = database.list_vector_memory_items(limit=100)
     scored_items = []
 
     for row in candidates:
