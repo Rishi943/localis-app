@@ -18,6 +18,8 @@ interface ShellProps {
   absoluteOverlay?: React.ReactNode;
   /** Whether to show the RSB rail. Default true. */
   showRsbRail?: boolean;
+  /** Scene-relative frame at which the active pill click-bounce starts. Only used when activePill >= 0. */
+  pillBounceStartFrame?: number;
 }
 
 const LSB_WIDTH = 64;
@@ -36,11 +38,30 @@ export const Shell: React.FC<ShellProps> = ({
   activeRsbIcon,
   absoluteOverlay,
   showRsbRail = true,
+  pillBounceStartFrame,
 }) => {
   const frame = useCurrentFrame();
 
   // Default activeRsbIcon: 0 (HA) when panel is shown, -1 otherwise
   const rsbIconIndex = activeRsbIcon !== undefined ? activeRsbIcon : (rsbContent ? 0 : -1);
+
+  const pillBounceScale = (i: number): number => {
+    if (i !== activePill || pillBounceStartFrame === undefined) return 1;
+    const bf = Math.max(0, frame - pillBounceStartFrame);
+    if (bf >= 8) return 1;
+    return interpolate(bf, [0, 2, 5, 8], [1, 0.9, 1.05, 1], {
+      extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+    });
+  };
+  const pillBounceFilter = (i: number): string => {
+    if (i !== activePill || pillBounceStartFrame === undefined) return 'none';
+    const bf = Math.max(0, frame - pillBounceStartFrame);
+    if (bf >= 8) return 'none';
+    const b = interpolate(bf, [0, 2, 4, 8], [1, 2.0, 1.3, 1], {
+      extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+    });
+    return `brightness(${b})`;
+  };
 
   const bgScale = interpolate(frame, [0, sceneDuration], [1.0, 1.06], {
     extrapolateRight: 'clamp',
@@ -51,23 +72,28 @@ export const Shell: React.FC<ShellProps> = ({
   const chatRight = rsbContent ? RSB_PANEL_WIDTH + rightEdge : rightEdge;
 
   const PILL_LABELS = ['Web', 'Home', 'Think', 'Remember'];
-  const PILL_ICONS = ['🔍', '🏠', '🧠', '📌'];
+  const PILL_ICON_FILES = [
+    'icons/localis-web-search.svg',
+    'icons/localis-home-assistant.svg',
+    'icons/localis-memory.svg',
+    'icons/localis-from-file.svg',
+  ];
 
   return (
     <div style={{ width: 1920, height: 1080, overflow: 'hidden', position: 'relative', fontFamily: fonts.ui }}>
-      {/* Wallpaper — slow cinematic push */}
+      {/* Wallpaper — slow cinematic Ken Burns push (35% opacity) */}
       <div style={{
         position: 'absolute', inset: -80,
         transform: `scale(${bgScale})`,
         transformOrigin: 'center center',
-        background: [
-          'radial-gradient(ellipse at 25% 85%, rgba(12,18,10,0.7) 0%, transparent 35%)',
-          'radial-gradient(ellipse at 75% 80%, rgba(10,14,18,0.5) 0%, transparent 30%)',
-          'radial-gradient(ellipse at 50% 55%, rgba(18,22,28,0.4) 0%, transparent 50%)',
-          'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(6,8,12,1) 25%, rgba(10,12,16,1) 55%, rgba(4,5,8,1) 80%, rgba(0,0,0,1) 100%)',
-        ].join(', '),
         zIndex: 0,
-      }} />
+        overflow: 'hidden',
+      }}>
+        <Img
+          src={staticFile('wp3770498-red-dead-redemption-2-4k-wallpapers.jpg')}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.35 }}
+        />
+      </div>
 
       {/* Extra dim overlay */}
       {bgDimExtra > 0 && (
@@ -81,9 +107,7 @@ export const Shell: React.FC<ShellProps> = ({
       {/* LEFT SIDEBAR RAIL — 64px (matches real app .lsb-rail) */}
       <div style={{
         position: 'absolute', left: 0, top: 0, bottom: 0, width: LSB_WIDTH,
-        background: colors.sidebar,
-        backdropFilter: 'blur(24px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+        background: 'rgba(10,10,10,0.82)',
         borderRight: `1px solid ${colors.border}`,
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         padding: '24px 0', gap: 6,
@@ -125,9 +149,7 @@ export const Shell: React.FC<ShellProps> = ({
       {/* HEADER — between LSB and RSB */}
       <div style={{
         position: 'absolute', left: LSB_WIDTH, right: 0, top: 0, height: HEADER_HEIGHT,
-        background: 'rgba(8,8,12,0.80)',
-        backdropFilter: 'blur(24px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+        background: 'rgba(8,8,12,0.94)',
         borderBottom: `1px solid rgba(255,255,255,0.06)`,
         display: 'flex', alignItems: 'center',
         padding: '0 28px',
@@ -144,9 +166,7 @@ export const Shell: React.FC<ShellProps> = ({
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '6px 13px', borderRadius: 100,
-          background: colors.panel,
-          backdropFilter: 'blur(24px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          background: 'rgba(15,15,15,0.85)',
           border: `1px solid ${colors.border}`,
           fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.5)',
         }}>
@@ -160,9 +180,7 @@ export const Shell: React.FC<ShellProps> = ({
         {/* Avatar — glass circle with initial */}
         <div style={{
           marginLeft: 14, width: 36, height: 36, borderRadius: '50%',
-          background: colors.panel,
-          backdropFilter: 'blur(24px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          background: 'rgba(15,15,15,0.85)',
           border: `1px solid ${colors.border}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: 'rgba(255,255,255,0.7)', fontSize: 20,
@@ -194,9 +212,7 @@ export const Shell: React.FC<ShellProps> = ({
           right: showRsbRail ? RSB_RAIL_WIDTH : 0,
           top: HEADER_HEIGHT, bottom: 0,
           width: RSB_PANEL_WIDTH,
-          background: colors.sidebar,
-          backdropFilter: 'blur(24px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          background: 'rgba(10,10,10,0.82)',
           borderLeft: `1px solid ${colors.border}`,
           zIndex: 10,
           overflowY: 'hidden',
@@ -239,8 +255,13 @@ export const Shell: React.FC<ShellProps> = ({
                   : '1px solid transparent',
                 color: i === activePill ? 'rgba(96,165,250,0.85)' : 'rgba(255,255,255,0.28)',
                 opacity: i === activePill ? 1 : 0.75,
+                transform: `scale(${pillBounceScale(i)})`,
+                filter: pillBounceFilter(i),
               }}>
-                <span style={{ fontSize: 13 }}>{PILL_ICONS[i]}</span>
+                <Img
+                  src={staticFile(PILL_ICON_FILES[i])}
+                  style={{ width: 14, height: 14, opacity: i === activePill ? 1 : 0.5 }}
+                />
                 {label}
               </div>
             ))}
@@ -271,9 +292,7 @@ export const Shell: React.FC<ShellProps> = ({
           {/* Input pill */}
           <div style={{
             width: '100%', height: 52, borderRadius: 100,
-            background: colors.panel,
-            backdropFilter: 'blur(24px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+            background: 'rgba(15,15,15,0.85)',
             border: `1px solid ${colors.border}`,
             boxShadow: glassShadow,
             display: 'flex', alignItems: 'center',

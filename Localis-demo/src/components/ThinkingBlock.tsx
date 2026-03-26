@@ -9,6 +9,7 @@ interface ThinkingBlockProps {
   endFrame?: number;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({ startFrame, endFrame }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
