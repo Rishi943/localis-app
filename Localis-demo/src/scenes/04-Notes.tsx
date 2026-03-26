@@ -4,7 +4,6 @@ import { Shell } from '../components/Shell';
 import { NotesPanel } from '../components/NotesPanel';
 import { VoiceBar } from '../components/VoiceBar';
 import { BEAT, BAR } from '../lib/beats';
-import { colors, fonts } from '../lib/design';
 
 const DURATION = 360; // 5 bars
 
@@ -55,7 +54,7 @@ export const NotesScene: React.FC = () => {
           states={[
             { frame: 0, state: 'idle' },
             { frame: 0, state: 'listening' },          // immediately listening when it appears
-            { frame: BAR + BEAT * 2 - VOICE_START, state: 'done' },  // f72 relative to VoiceBar
+            { frame: BAR + BEAT * 2, state: 'done' },
           ]}
         />
       </div>

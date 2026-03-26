@@ -10,11 +10,6 @@ import { BEAT, BAR } from '../lib/beats';
 
 const DURATION = 576; // 8 bars
 
-const RESPONSE_LINES = [
-  { bold: true, text: 'The file outlines Localis' },
-  { bold: false, text: ', a private AI assistant that runs entirely on your own computer using your GPU. Here\'s a summary:' },
-];
-
 const BULLETS = [
   { key: 'Technology:', value: 'Runs on your local GPU, no cloud or subscriptions.' },
   { key: 'Features:', value: 'Fully local · Two-tier memory · RAG · Web search · Multi-provider support' },

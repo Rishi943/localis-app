@@ -15,6 +15,8 @@ interface ShellProps {
   bgDimExtra?: number;
   /** Index of active mode pill (0=Web, 1=Home, 2=Think, 3=Remember). -1 = none active. Default: -1 */
   activePill?: number;
+  /** Full-frame absolute content rendered at Shell root level (zIndex 20+) */
+  absoluteOverlay?: React.ReactNode;
 }
 
 export const Shell: React.FC<ShellProps> = ({
@@ -24,6 +26,7 @@ export const Shell: React.FC<ShellProps> = ({
   chatOpacity = 1,
   bgDimExtra = 0,
   activePill = -1,
+  absoluteOverlay,
 }) => {
   const frame = useCurrentFrame();
 
@@ -195,6 +198,9 @@ export const Shell: React.FC<ShellProps> = ({
           }}>↑</div>
         </div>
       </div>
+
+      {/* Absolute overlay — full-frame, not clipped by chat area */}
+      {absoluteOverlay}
     </div>
   );
 };

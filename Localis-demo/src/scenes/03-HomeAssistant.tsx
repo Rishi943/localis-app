@@ -1,7 +1,6 @@
 import React from 'react';
 import { Shell } from '../components/Shell';
 import { RsbPanel } from '../components/RsbPanel';
-import { BAR } from '../lib/beats';
 import { colors, fonts } from '../lib/design';
 
 const DURATION = 576; // 8 bars

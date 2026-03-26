@@ -46,35 +46,59 @@ export const ClimaxScene: React.FC = () => {
   const logoScale = interpolate(logoProgress, [0, 1], [0.7, 1.0]);
 
   return (
-    <Shell sceneDuration={DURATION} bgDimExtra={0.25}>
-      {/* Voice bar — top right area (fixed position, right: 60) */}
-      <div style={{ position: 'absolute', top: 70, right: 60, zIndex: 20 }}>
-        <VoiceBar
-          startFrame={VOICE_START}
-          states={[
-            { frame: 0, state: 'idle' },
-            { frame: BEAT, state: 'listening' },
-            { frame: BAR + BEAT * 2, state: 'done' },
-          ]}
-        />
-      </div>
+    <Shell
+      sceneDuration={DURATION}
+      bgDimExtra={0.25}
+      absoluteOverlay={
+        <>
+          {/* Voice bar */}
+          <div style={{ position: 'absolute', top: 70, right: 60, zIndex: 20 }}>
+            <VoiceBar
+              startFrame={VOICE_START}
+              states={[
+                { frame: 0, state: 'idle' },
+                { frame: BEAT, state: 'listening' },
+                { frame: BAR + BEAT * 2, state: 'done' },
+              ]}
+            />
+          </div>
 
-      {/* Subtitle — lower third */}
-      <div style={{
-        position: 'absolute',
-        bottom: 120, left: 0, right: 0,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-        opacity: subtitleOpacity * subtitleFadeOut,
-        zIndex: 20,
-      }}>
-        <div style={{ color: colors.text, fontSize: 36, fontWeight: 700, letterSpacing: '0.02em', fontFamily: fonts.ui }}>
-          light banda kar
-        </div>
-        <div style={{ color: colors.textMuted, fontSize: 18, fontFamily: fonts.ui }}>
-          (Marathi)
-        </div>
-      </div>
+          {/* Subtitle */}
+          <div style={{
+            position: 'absolute',
+            bottom: 120, left: 0, right: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+            opacity: subtitleOpacity * subtitleFadeOut,
+            zIndex: 20,
+          }}>
+            <div style={{ color: colors.text, fontSize: 36, fontWeight: 700, letterSpacing: '0.02em', fontFamily: fonts.ui }}>
+              light banda kar
+            </div>
+            <div style={{ color: colors.textMuted, fontSize: 18, fontFamily: fonts.ui }}>
+              (Marathi)
+            </div>
+          </div>
 
+          {/* Fade to black */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: `rgba(0,0,0,${fadeBlack})`,
+            zIndex: 25, pointerEvents: 'none',
+          }} />
+
+          {/* Outro logo */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: logoOpacity,
+            transform: `scale(${logoScale})`,
+            zIndex: 30,
+          }}>
+            <Img src={staticFile('logo.svg')} style={{ width: 64, height: 64 }} />
+          </div>
+        </>
+      }
+    >
       {/* Chat messages */}
       <div style={{ marginTop: 80, display: 'flex', flexDirection: 'column', gap: 14, width: '100%' }}>
         {/* User bubble */}
@@ -103,24 +127,6 @@ export const ClimaxScene: React.FC = () => {
             Rishi Room Light turned OFF.
           </ChatBubble>
         </ZoomWrapper>
-      </div>
-
-      {/* Fade to black overlay */}
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: `rgba(0,0,0,${fadeBlack})`,
-        zIndex: 25, pointerEvents: 'none',
-      }} />
-
-      {/* Outro logo */}
-      <div style={{
-        position: 'absolute', inset: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        opacity: logoOpacity,
-        transform: `scale(${logoScale})`,
-        zIndex: 30,
-      }}>
-        <Img src={staticFile('logo.svg')} style={{ width: 64, height: 64 }} />
       </div>
     </Shell>
   );
