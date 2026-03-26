@@ -58,10 +58,13 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           {isUser ? (
             <div style={{
               width: 28, height: 28, borderRadius: '50%',
-              background: colors.accent,
+              background: colors.panel,
+              backdropFilter: 'blur(24px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+              border: `1px solid ${colors.border}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontSize: 12, fontWeight: 700,
-            }}>U</div>
+              color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 700,
+            }}>R</div>
           ) : (
             <div style={{
               width: 28, height: 28, borderRadius: '50%',
