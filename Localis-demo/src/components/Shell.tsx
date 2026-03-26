@@ -1,23 +1,30 @@
 import React from 'react';
 import { useCurrentFrame, interpolate, Img, staticFile } from 'remotion';
-import { colors, fonts, glass } from '../lib/design';
+import { colors, fonts, glassShadow } from '../lib/design';
+import { RsbRail } from './RsbRail';
 
 interface ShellProps {
-  /** Total frame count for this scene (drives bg push calc) */
   sceneDuration: number;
-  /** Chat content for centre column */
   children?: React.ReactNode;
-  /** Right sidebar content — if provided, RSB renders */
+  /** Right sidebar panel content — if provided, RSB panel (284px) renders between chat and rail */
   rsbContent?: React.ReactNode;
-  /** 0–1 opacity multiplier for chat area (for dimming in later scenes) */
   chatOpacity?: number;
-  /** Extra dark overlay on bg (0–1) for climax scene */
   bgDimExtra?: number;
-  /** Index of active mode pill (0=Web, 1=Home, 2=Think, 3=Remember). -1 = none active. Default: -1 */
+  /** Index of active toolbar pill (0=Web, 1=Home, 2=Think, 3=Remember). -1 = none active. */
   activePill?: number;
+  /** Index of active RSB rail icon (0=HA, 1=Model, 2=Prompt, 3=Finance, 4=Notes). -1=none. Default 0 when rsbContent present, -1 otherwise. */
+  activeRsbIcon?: number;
   /** Full-frame absolute content rendered at Shell root level (zIndex 20+) */
   absoluteOverlay?: React.ReactNode;
+  /** Whether to show the RSB rail. Default true. */
+  showRsbRail?: boolean;
 }
+
+const LSB_WIDTH = 64;
+const RSB_RAIL_WIDTH = 72;
+const RSB_PANEL_WIDTH = 284;
+const HEADER_HEIGHT = 62;
+const INPUT_HEIGHT = 120; // toolbar + input pill + disclaimer
 
 export const Shell: React.FC<ShellProps> = ({
   sceneDuration,
@@ -26,14 +33,25 @@ export const Shell: React.FC<ShellProps> = ({
   chatOpacity = 1,
   bgDimExtra = 0,
   activePill = -1,
+  activeRsbIcon,
   absoluteOverlay,
+  showRsbRail = true,
 }) => {
   const frame = useCurrentFrame();
+
+  // Default activeRsbIcon: 0 (HA) when panel is shown, -1 otherwise
+  const rsbIconIndex = activeRsbIcon !== undefined ? activeRsbIcon : (rsbContent ? 0 : -1);
 
   const bgScale = interpolate(frame, [0, sceneDuration], [1.0, 1.06], {
     extrapolateRight: 'clamp',
     extrapolateLeft: 'clamp',
   });
+
+  const rightEdge = showRsbRail ? RSB_RAIL_WIDTH : 0;
+  const chatRight = rsbContent ? RSB_PANEL_WIDTH + rightEdge : rightEdge;
+
+  const PILL_LABELS = ['Web', 'Home', 'Think', 'Remember'];
+  const PILL_ICONS = ['🔍', '🏠', '🧠', '📌'];
 
   return (
     <div style={{ width: 1920, height: 1080, overflow: 'hidden', position: 'relative', fontFamily: fonts.ui }}>
@@ -51,97 +69,134 @@ export const Shell: React.FC<ShellProps> = ({
         zIndex: 0,
       }} />
 
-      {/* Extra dim overlay for climax */}
+      {/* Extra dim overlay */}
       {bgDimExtra > 0 && (
         <div style={{
           position: 'absolute', inset: 0,
           background: `rgba(0,0,0,${bgDimExtra})`,
-          zIndex: 1,
-          pointerEvents: 'none',
+          zIndex: 1, pointerEvents: 'none',
         }} />
       )}
 
-      {/* LEFT SIDEBAR — 48px */}
+      {/* LEFT SIDEBAR RAIL — 64px (matches real app .lsb-rail) */}
       <div style={{
-        position: 'absolute', left: 0, top: 0, bottom: 0, width: 48,
+        position: 'absolute', left: 0, top: 0, bottom: 0, width: LSB_WIDTH,
         background: colors.sidebar,
+        backdropFilter: 'blur(24px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
         borderRight: `1px solid ${colors.border}`,
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        paddingTop: 12, paddingBottom: 12, gap: 8,
+        padding: '24px 0', gap: 6,
         zIndex: 10,
       }}>
-        {/* Logo button */}
+        {/* Logo — logo.svg in dark rounded square */}
         <div style={{
-          width: 32, height: 32, borderRadius: 8,
+          width: 34, height: 34, borderRadius: 10,
           background: '#161616',
-          border: `1px solid ${colors.borderHighlight}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           overflow: 'hidden',
+          marginBottom: 16,
         }}>
-          <Img src={staticFile('logo.svg')} style={{ width: 28, height: 28 }} />
+          <Img src={staticFile('logo.svg')} style={{ width: 30, height: 30 }} />
         </div>
+        {/* New Chat icon */}
+        <div style={{
+          width: 46, height: 46, borderRadius: 15,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'rgba(255,255,255,0.35)', fontSize: 22,
+        }}>+</div>
         <div style={{ flex: 1 }} />
-        {/* Settings icon */}
-        <div style={{ color: colors.textDim, fontSize: 16 }}>⚙</div>
+        {/* Settings */}
+        <div style={{
+          width: 38, height: 38, borderRadius: 9,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'rgba(255,255,255,0.27)', fontSize: 17,
+        }}>⚙</div>
+        {/* Expand chevron */}
+        <div style={{
+          width: 28, height: 28, borderRadius: 8,
+          background: 'rgba(255,255,255,0.05)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'rgba(255,255,255,0.4)', fontSize: 14,
+        }}>▶</div>
       </div>
 
-      {/* HEADER — full width */}
+      {/* HEADER — between LSB and RSB */}
       <div style={{
-        position: 'absolute', left: 48, right: 0, top: 0, height: 52,
-        ...glass,
+        position: 'absolute', left: LSB_WIDTH, right: 0, top: 0, height: HEADER_HEIGHT,
         background: 'rgba(8,8,12,0.80)',
-        borderBottom: `1px solid ${colors.border}`,
+        backdropFilter: 'blur(24px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+        borderBottom: `1px solid rgba(255,255,255,0.06)`,
         display: 'flex', alignItems: 'center',
-        paddingLeft: 20, paddingRight: 20,
+        padding: '0 28px',
         zIndex: 10,
       }}>
         <div>
-          <div style={{ color: colors.text, fontSize: 15, fontWeight: 600, letterSpacing: '0.02em' }}>Localis</div>
-          <div style={{ color: colors.textDim, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Qwen2.5 · 7B</div>
+          <div style={{ color: colors.text, fontSize: 15, fontWeight: 700 }}>Localis</div>
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase' as const, marginTop: 2 }}>
+            Qwen2.5 · 7B
+          </div>
         </div>
         <div style={{ flex: 1 }} />
-        {/* Neural Engine Active */}
+        {/* Status pill — glass style matching real app */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6,
-          background: 'rgba(34,197,94,0.12)',
-          border: `1px solid rgba(34,197,94,0.3)`,
-          borderRadius: 20, padding: '4px 12px',
-          color: colors.green, fontSize: 12, fontWeight: 500,
+          padding: '6px 13px', borderRadius: 100,
+          background: colors.panel,
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          border: `1px solid ${colors.border}`,
+          fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.5)',
         }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: colors.green }} />
+          <div style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: colors.green,
+            boxShadow: `0 0 8px rgba(34,197,94,0.6)`,
+          }} />
           Neural Engine Active
         </div>
+        {/* Avatar — glass circle with initial */}
         <div style={{
-          marginLeft: 12, width: 32, height: 32, borderRadius: '50%',
-          background: colors.accent,
+          marginLeft: 14, width: 36, height: 36, borderRadius: '50%',
+          background: colors.panel,
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          border: `1px solid ${colors.border}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#fff', fontSize: 13, fontWeight: 700,
-        }}>U</div>
+          color: 'rgba(255,255,255,0.7)', fontSize: 20,
+        }}>👤</div>
       </div>
 
       {/* CHAT AREA */}
       <div style={{
         position: 'absolute',
-        left: 48,
-        right: rsbContent ? 280 : 48,
-        top: 52,
-        bottom: 80,
+        left: LSB_WIDTH,
+        right: chatRight,
+        top: HEADER_HEIGHT,
+        bottom: INPUT_HEIGHT,
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        padding: '24px 0',
+        padding: '24px 28px 0',
         overflow: 'hidden',
         opacity: chatOpacity,
         zIndex: 5,
       }}>
-        <div style={{ width: '100%', maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ width: '100%', maxWidth: 820, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {children}
         </div>
       </div>
 
-      {/* RIGHT SIDEBAR */}
+      {/* RSB PANEL — slides in when rsbContent provided */}
       {rsbContent && (
         <div style={{
-          position: 'absolute', right: 0, top: 52, bottom: 0, width: 280,
+          position: 'absolute',
+          right: showRsbRail ? RSB_RAIL_WIDTH : 0,
+          top: HEADER_HEIGHT, bottom: 0,
+          width: RSB_PANEL_WIDTH,
           background: colors.sidebar,
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
           borderLeft: `1px solid ${colors.border}`,
           zIndex: 10,
           overflowY: 'hidden',
@@ -150,56 +205,117 @@ export const Shell: React.FC<ShellProps> = ({
         </div>
       )}
 
-      {/* BOTTOM INPUT BAR */}
-      <div style={{
-        position: 'absolute', left: 48, right: rsbContent ? 280 : 48, bottom: 0, height: 80,
-        ...glass,
-        background: 'rgba(8,8,12,0.80)',
-        borderTop: `1px solid ${colors.border}`,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        gap: 8, zIndex: 10,
-      }}>
-        {/* Mode pills */}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {['🌐 Web', '🏠 Home', '💭 Think', '📌 Remember'].map((label, i) => (
-            <div key={i} style={{
-              padding: '3px 10px', borderRadius: 20, fontSize: 11,
-              background: i === activePill ? 'rgba(59,130,246,0.2)' : 'transparent',
-              border: i === activePill ? `1px solid rgba(59,130,246,0.4)` : `1px solid ${colors.border}`,
-              color: i === activePill ? colors.accent : colors.textMuted,
-            }}>{label}</div>
-          ))}
-          <div style={{
-            width: 28, height: 16, borderRadius: 8,
-            background: 'rgba(255,255,255,0.15)',
-            position: 'relative',
-          }}>
-            <div style={{
-              width: 12, height: 12, borderRadius: '50%', background: '#fff',
-              position: 'absolute', top: 2, right: 2,
-            }} />
-          </div>
+      {/* RSB RAIL — always visible on right edge */}
+      {showRsbRail && (
+        <div style={{ position: 'absolute', right: 0, top: HEADER_HEIGHT, bottom: 0, zIndex: 10 }}>
+          <RsbRail activeIndex={rsbIconIndex} />
         </div>
-        {/* Input pill */}
-        <div style={{
-          width: '90%', maxWidth: 700, height: 44, borderRadius: 22,
-          background: 'rgba(255,255,255,0.06)',
-          border: `1px solid ${colors.borderHighlight}`,
-          display: 'flex', alignItems: 'center',
-          padding: '0 16px',
-        }}>
-          <span style={{ color: colors.textDim, fontSize: 14, flex: 1 }}>Message Localis…</span>
-          <span style={{ color: colors.textDim, fontSize: 18 }}>🎤</span>
+      )}
+
+      {/* BOTTOM INPUT BAR — toolbar + input pill + disclaimer */}
+      <div style={{
+        position: 'absolute',
+        left: LSB_WIDTH,
+        right: chatRight,
+        bottom: 0,
+        height: INPUT_HEIGHT,
+        background: 'linear-gradient(to top, #000 0%, rgba(0,0,0,0.92) 55%, transparent 100%)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'flex-end',
+        paddingBottom: 22,
+        zIndex: 10,
+      }}>
+        <div style={{ width: '95%', maxWidth: 820, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+          {/* Toolbar — above input pill */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 8px' }}>
+            {PILL_LABELS.map((label, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                padding: '4px 8px', borderRadius: 7,
+                fontSize: 11, fontWeight: 500, whiteSpace: 'nowrap' as const,
+                background: i === activePill ? colors.accentSoft : 'transparent',
+                border: i === activePill
+                  ? `1px solid ${colors.accentBorder}`
+                  : '1px solid transparent',
+                color: i === activePill ? 'rgba(96,165,250,0.85)' : 'rgba(255,255,255,0.28)',
+                opacity: i === activePill ? 1 : 0.75,
+              }}>
+                <span style={{ fontSize: 13 }}>{PILL_ICONS[i]}</span>
+                {label}
+              </div>
+            ))}
+            {/* Separator */}
+            <div style={{
+              width: 1, height: 14,
+              background: 'rgba(255,255,255,0.12)',
+              margin: '0 6px', flexShrink: 0,
+            }} />
+            {/* Wakeword toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, opacity: 0.65 }}>
+              <div style={{
+                width: 24, height: 14, borderRadius: 100,
+                background: colors.accent,
+                position: 'relative',
+              }}>
+                <div style={{
+                  width: 10, height: 10, borderRadius: '50%', background: '#fff',
+                  position: 'absolute', top: 2, left: 12,
+                }} />
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 500, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.02em' }}>
+                Wakeword
+              </span>
+            </div>
+          </div>
+
+          {/* Input pill */}
           <div style={{
-            marginLeft: 10, width: 32, height: 32, borderRadius: '50%',
-            background: colors.accent,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontSize: 16,
-          }}>↑</div>
+            width: '100%', height: 52, borderRadius: 100,
+            background: colors.panel,
+            backdropFilter: 'blur(24px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+            border: `1px solid ${colors.border}`,
+            boxShadow: glassShadow,
+            display: 'flex', alignItems: 'center',
+            padding: '0 7px 0 10px',
+            gap: 6,
+          }}>
+            {/* Attach icon */}
+            <div style={{
+              width: 38, height: 38, borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'rgba(255,255,255,0.32)', fontSize: 18, flexShrink: 0,
+            }}>📎</div>
+            {/* Placeholder text */}
+            <div style={{ flex: 1, color: 'rgba(255,255,255,0.28)', fontSize: 14 }}>
+              Send a message to Localis…
+            </div>
+            {/* Mic button */}
+            <div style={{
+              width: 38, height: 38, borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'rgba(255,255,255,0.32)', fontSize: 18, flexShrink: 0,
+            }}>🎤</div>
+            {/* Send button — blue circle */}
+            <div style={{
+              width: 38, height: 38, borderRadius: '50%',
+              background: colors.accent,
+              boxShadow: '0 0 14px rgba(18,117,226,0.4)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontSize: 18, flexShrink: 0,
+            }}>↑</div>
+          </div>
+
+          {/* Disclaimer */}
+          <div style={{
+            fontSize: 10, color: 'rgba(255,255,255,0.15)', textAlign: 'center' as const,
+          }}>
+            Localis can make mistakes. Check important info.
+          </div>
         </div>
       </div>
 
-      {/* Absolute overlay — full-frame, not clipped by chat area */}
+      {/* Absolute overlay — full-frame, not clipped */}
       {absoluteOverlay}
     </div>
   );
