@@ -5,11 +5,11 @@ import { LocalisDemoComposition } from './Composition';
 
 /**
  * Net frame count:
- * Scenes: 216 + 576 + 432 + 576 + 360 + 432 = 2592
+ * Scenes: 90 + 576 + 432 + 576 + 360 + 432 = 2466
  * Transitions: 5 × 18 = 90
- * Total: 2592 - 90 = 2502
+ * Total: 2466 - 90 = 2376
  */
-const TOTAL_FRAMES = 2502;
+const TOTAL_FRAMES = 2376;
 
 export const RemotionRoot: React.FC = () => {
   return (

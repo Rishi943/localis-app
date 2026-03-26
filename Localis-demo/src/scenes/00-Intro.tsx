@@ -1,35 +1,34 @@
 import React from 'react';
 import { useCurrentFrame, useVideoConfig, interpolate, spring, Img, staticFile } from 'remotion';
 import { colors, fonts } from '../lib/design';
-import { BEAT, BAR } from '../lib/beats';
 
 export const IntroScene: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // Logo: spring in at f0, peak by f36
-  const logoProgress = spring({ frame, fps, config: { damping: 16, stiffness: 100, mass: 1.2 } });
+  // Logo: spring in at f0 — stiffer spring, settles faster
+  const logoProgress = spring({ frame, fps, config: { damping: 18, stiffness: 200, mass: 0.8 } });
   const logoScale = interpolate(logoProgress, [0, 1], [0.4, 1.0]);
-  const logoOpacity = interpolate(frame, [0, 20], [0, 1], { extrapolateRight: 'clamp' });
+  const logoOpacity = interpolate(frame, [0, 12], [0, 1], { extrapolateRight: 'clamp' });
 
-  // "Introducing Localis" — fades in at beat 2 (f18)
-  const titleOpacity = interpolate(frame, [BEAT * 1, BEAT * 3], [0, 1], {
+  // "Introducing Localis" — fades in at f12
+  const titleOpacity = interpolate(frame, [12, 28], [0, 1], {
     extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
   });
-  const titleY = interpolate(frame, [BEAT * 1, BEAT * 3], [12, 0], {
-    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
-  });
-
-  // Tagline — fades in at beat 4 / bar end (f54)
-  const tagOpacity = interpolate(frame, [BEAT * 4, BEAT * 6], [0, 1], {
-    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
-  });
-  const tagY = interpolate(frame, [BEAT * 4, BEAT * 6], [10, 0], {
+  const titleY = interpolate(frame, [12, 28], [10, 0], {
     extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
   });
 
-  // Subtle logo glow pulse after bar 2
-  const glow = frame > BAR * 2 ? 0.5 + 0.5 * Math.abs(Math.sin(frame * 0.05)) : 0;
+  // Tagline — fades in at f32
+  const tagOpacity = interpolate(frame, [32, 55], [0, 1], {
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  const tagY = interpolate(frame, [32, 55], [8, 0], {
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+
+  // Subtle logo glow pulse after f62
+  const glow = frame > 62 ? 0.5 + 0.5 * Math.abs(Math.sin(frame * 0.12)) : 0;
 
   return (
     <div style={{

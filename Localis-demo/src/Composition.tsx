@@ -31,8 +31,8 @@ export const LocalisDemoComposition: React.FC = () => {
       <Audio src={staticFile('music.mp3')} volume={audioVolume} />
 
       <TransitionSeries>
-        {/* Scene 00 — Intro: 216f / 3 bars */}
-        <TransitionSeries.Sequence durationInFrames={216}>
+        {/* Scene 00 — Intro: 90f / 3 s */}
+        <TransitionSeries.Sequence durationInFrames={90}>
           <IntroScene />
         </TransitionSeries.Sequence>
 
