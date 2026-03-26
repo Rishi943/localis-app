@@ -1,5 +1,5 @@
 import React from 'react';
-import { useCurrentFrame, interpolate } from 'remotion';
+import { useCurrentFrame, useVideoConfig, interpolate, spring } from 'remotion';
 import { colors, fonts } from '../lib/design';
 import { BEAT } from '../lib/beats';
 
@@ -19,6 +19,9 @@ interface IngestProgressProps {
 export const IngestProgress: React.FC<IngestProgressProps> = ({ startFrame }) => {
   const frame = useCurrentFrame();
   const localFrame = Math.max(0, frame - startFrame);
+  const { fps } = useVideoConfig();
+  const entryProgress = spring({ frame: localFrame, fps, config: { damping: 18, stiffness: 180 } });
+  const entryY = interpolate(entryProgress, [0, 1], [18, 0]);
 
   return (
     <div style={{
@@ -27,6 +30,7 @@ export const IngestProgress: React.FC<IngestProgressProps> = ({ startFrame }) =>
       fontFamily: fonts.mono,
       fontSize: 12,
       lineHeight: 1.8,
+      transform: `translateY(${entryY}px)`,
     }}>
       {ITEMS.map((item, i) => {
         const itemFrame = i * BEAT; // each item appears 1 beat apart
