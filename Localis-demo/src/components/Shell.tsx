@@ -136,7 +136,7 @@ export const Shell: React.FC<ShellProps> = ({
         <div>
           <div style={{ color: colors.text, fontSize: 15, fontWeight: 700 }}>Localis</div>
           <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase' as const, marginTop: 2 }}>
-            Qwen2.5 · 7B
+            Qwen 3.5 · 0.8B
           </div>
         </div>
         <div style={{ flex: 1 }} />
