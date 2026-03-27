@@ -58,9 +58,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           {isUser ? (
             <div style={{
               width: 28, height: 28, borderRadius: '50%',
-              background: colors.panel,
-              backdropFilter: 'blur(24px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+              background: 'rgba(15,15,15,0.85)',
               border: `1px solid ${colors.border}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 700,
@@ -86,7 +84,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
         padding: '12px 18px',
         borderRadius: isUser ? '18px 6px 18px 18px' : '6px 18px 18px 18px',
         ...glass,
-        background: isUser ? 'rgba(59,130,246,0.15)' : 'rgba(20,20,20,0.75)',
+        backdropFilter: 'none',
+        WebkitBackdropFilter: 'none',
+        background: isUser ? 'rgba(59,130,246,0.22)' : 'rgba(20,20,20,0.88)',
         border: `1px solid ${isUser ? 'rgba(59,130,246,0.3)' : colors.border}`,
         color: colors.text,
         fontSize: 15,
