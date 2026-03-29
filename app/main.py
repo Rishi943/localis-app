@@ -990,29 +990,6 @@ async def debug_context_endpoint(
 async def chat_endpoint(req: ChatRequest):
     logger.debug(f"[Chat] Session: {req.session_id[:12]}... think={req.think_mode} web={req.web_search_mode} mem={req.memory_mode}")
 
-    # Assist Mode early-return — bypasses entire chat pipeline + big LLM
-    if req.assist_mode:
-        from .assist import assist_chat, AssistRequest as _AssistRequest
-
-        assist_req = _AssistRequest(message=req.message, session_id=req.session_id)
-
-        class _FakeRequest:
-            class app:
-                class state:
-                    pass
-
-        assist_result = await assist_chat(assist_req, _FakeRequest())
-        _session_id = req.session_id
-        _user_msg = req.message.strip()
-        database.add_message(_session_id, "user", _user_msg, len(_user_msg) // 3)
-        database.add_message(_session_id, "assistant", assist_result.response, len(assist_result.response) // 3)
-
-        async def _assist_stream():
-            payload = json.dumps({"content": assist_result.response, "stop": True, "assist_result": assist_result.tool_call})
-            yield f"data: {payload}\n\n"
-
-        return StreamingResponse(_assist_stream(), media_type="text/event-stream")
-
     global current_model
     if not current_model:
         raise HTTPException(status_code=503, detail="No model loaded. Please load a model in settings.")

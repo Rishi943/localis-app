@@ -1,5 +1,5 @@
 # app/assist.py
-# Assist Mode — FunctionGemma-based smart home control via Home Assistant REST API
+# Assist Mode — Home Assistant control via REST API
 # Phase 1: on/off toggle + state query
 # Phase 2: brightness/color (gated behind ASSIST_PHASE env var)
 
@@ -8,7 +8,6 @@ import re
 import json
 import sqlite3
 import uuid
-import threading
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -26,17 +25,12 @@ logger = logging.getLogger(__name__)
 _raw_phase = int(os.getenv("LOCALIS_ASSIST_PHASE", "2"))
 ASSIST_PHASE = max(1, min(2, _raw_phase))
 
-DEFAULT_ASSIST_MODEL_FILE = "distil-home-assistant-functiongemma.gguf"
-ASSIST_MODEL_LOCK = threading.Lock()
-
 # Module-level state (populated by register_assist)
-_assist_model = None          # Llama instance
 _models_dir: str = ""
 _ha_url: str = ""
 _ha_token: str = ""
 _light_entity: str = ""
 _debug: bool = False
-_assist_model_file: str = DEFAULT_ASSIST_MODEL_FILE
 
 router = APIRouter(prefix="/assist", tags=["assist"])
 
@@ -112,21 +106,16 @@ async def light_kelvin(req: _KelvinReq):
 
 def register_assist(app, models_dir, debug: bool = False):
     """Called from main.py during app construction."""
-    global _models_dir, _ha_url, _ha_token, _light_entity, _debug, _assist_model_file
-
+    global _models_dir, _ha_url, _ha_token, _light_entity, _debug
     _models_dir = str(models_dir)
     _debug = debug
-
     _ha_url = os.getenv("LOCALIS_HA_URL", "").rstrip("/")
     _ha_token = os.getenv("LOCALIS_HA_TOKEN", "")
-    _light_entity = os.getenv("LOCALIS_LIGHT_ENTITY", "light.bedroom_light")
-    _assist_model_file = os.getenv("LOCALIS_ASSIST_MODEL", DEFAULT_ASSIST_MODEL_FILE)
-
+    _light_entity = os.getenv("LOCALIS_LIGHT_ENTITY", "light.rishi_room_light")
     if _ha_url and _ha_token:
-        logger.info(f"[Assist] Home Assistant configured: {_ha_url}, entity: {_light_entity}, phase: {ASSIST_PHASE}")
+        logger.info(f"[Assist] Home Assistant configured: {_ha_url}, entity: {_light_entity}")
     else:
-        logger.warning("[Assist] Home Assistant not configured. Set LOCALIS_HA_URL and LOCALIS_HA_TOKEN in secret.env")
-
+        logger.warning("[Assist] HA not configured. Set LOCALIS_HA_URL and LOCALIS_HA_TOKEN.")
     app.include_router(router)
 
 
@@ -494,139 +483,6 @@ def _heuristic_fallback(user_message: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Model management
-# ---------------------------------------------------------------------------
-
-def _get_model_path() -> Optional[str]:
-    path = os.path.join(_models_dir, _assist_model_file)
-    return path if os.path.isfile(path) else None
-
-
-def _load_assist_model():
-    """Load the FunctionGemma GGUF. Must be called with ASSIST_MODEL_LOCK held."""
-    global _assist_model
-
-    from llama_cpp import Llama
-
-    model_path = _get_model_path()
-    if not model_path:
-        raise FileNotFoundError(
-            f"Assist model not found: {_assist_model_file}. "
-            "Download from HuggingFace: huggingface-cli download distil-labs/distil-home-assistant-functiongemma-gguf"
-        )
-
-    logger.info(f"[Assist] Loading FunctionGemma from {model_path} (CPU-only)")
-    _assist_model = Llama(
-        model_path=model_path,
-        n_gpu_layers=0,   # CPU-only — no VRAM contention with main model
-        n_ctx=2048,
-        verbose=False,
-    )
-    logger.info("[Assist] FunctionGemma loaded successfully")
-
-
-def _ensure_assist_model():
-    """Lazy-load with double-check locking."""
-    global _assist_model
-    if _assist_model is not None:
-        return
-    with ASSIST_MODEL_LOCK:
-        if _assist_model is not None:
-            return
-        _load_assist_model()
-
-
-# ---------------------------------------------------------------------------
-# Inference
-# ---------------------------------------------------------------------------
-
-def _run_assist_inference(user_message: str) -> Optional[dict]:
-    """Single inference attempt. Returns parsed tool call dict or None."""
-    global _assist_model
-
-    tools = _build_tool_schema()
-    messages = [
-        {"role": "system", "content": _build_system_prompt()},
-        {"role": "user", "content": user_message},
-    ]
-
-    with ASSIST_MODEL_LOCK:
-        try:
-            result = _assist_model.create_chat_completion(
-                messages=messages,
-                tools=tools,
-                tool_choice="required",
-                temperature=0,
-                max_tokens=256,
-            )
-        except TypeError:
-            # Older llama-cpp-python may not support tool_choice="required"
-            result = _assist_model.create_chat_completion(
-                messages=messages,
-                tools=tools,
-                tool_choice="auto",
-                temperature=0,
-                max_tokens=256,
-            )
-
-    choice = result["choices"][0]
-    msg = choice.get("message", {}) or {}
-
-    # 1) Preferred: native tool_calls
-    tool_calls = msg.get("tool_calls") or []
-    if tool_calls:
-        tc = tool_calls[0]
-        fn = tc.get("function") or {}
-        name = fn.get("name")
-        args = fn.get("arguments", {})
-        if isinstance(args, str):
-            try:
-                args = json.loads(args)
-            except Exception:
-                args = {}
-        if _debug:
-            logger.debug(f"[Assist] Native tool_call: name={name!r} args={args!r}")
-        if name:
-            return {"name": name, "arguments": args}
-
-    # 2) Fallback: parse FunctionGemma native <start_function_call> format
-    content = msg.get("content") or ""
-    if _debug:
-        logger.debug(f"[Assist] No tool_calls in response. Raw content fallback: {content!r}")
-
-    native = _parse_native_call(content)
-    if native is not None:
-        if _debug:
-            logger.debug(f"[Assist] Parsed via native format: {native!r}")
-        return native
-
-    return None
-
-
-def _run_assist_with_retry(user_message: str) -> dict:
-    """
-    Attempt inference; on parse failure retry once, then fall back to
-    deterministic heuristic. Always returns a tool-call dict (never None).
-    """
-    result = _run_assist_inference(user_message)
-    if result is not None:
-        return result
-
-    if _debug:
-        logger.debug("[Assist] First inference parse failed — retrying with fix suffix")
-
-    retry_msg = user_message + " (important: use tool call)"
-    result = _run_assist_inference(retry_msg)
-    if result is not None:
-        return result
-
-    if _debug:
-        logger.debug("[Assist] Retry failed — using heuristic fallback")
-
-    return _heuristic_fallback(user_message)
-
-
-# ---------------------------------------------------------------------------
 # Home Assistant client
 # ---------------------------------------------------------------------------
 
@@ -672,6 +528,85 @@ async def ha_call_service(domain: str, service: str, data: dict) -> dict:
         raise PermissionError("Unauthorized")
     resp.raise_for_status()
     return resp.json() if resp.content else {}
+
+
+# ---------------------------------------------------------------------------
+# Public API — called from main.py tool dispatcher
+# ---------------------------------------------------------------------------
+
+def is_ha_configured() -> bool:
+    """True if HA URL and token are both set."""
+    return bool(_ha_url and _ha_token)
+
+
+_COLOR_MAP: dict = {
+    "red": [255, 0, 0], "green": [0, 255, 0], "blue": [0, 0, 255],
+    "yellow": [255, 255, 0], "orange": [255, 165, 0], "purple": [128, 0, 128],
+    "pink": [255, 105, 180], "cyan": [0, 255, 255], "white": [255, 255, 255],
+}
+
+
+async def execute_home_set_light(
+    state: str,
+    brightness: int | None = None,
+    color_name: str | None = None,
+) -> str:
+    """Control the bedroom light. Returns a human-readable result string."""
+    if state == "off" and brightness is None and color_name is None:
+        service = "turn_off"
+        service_data: dict = {"entity_id": _light_entity}
+    else:
+        service = "turn_on"
+        service_data = {"entity_id": _light_entity}
+        if brightness is not None:
+            service_data["brightness"] = max(0, min(255, int(brightness)))
+        if color_name:
+            cn = color_name.lower().strip()
+            if cn == "warm white":
+                service_data["color_temp_kelvin"] = 2700
+            elif cn == "cool white":
+                service_data["color_temp_kelvin"] = 6500
+            elif cn in _COLOR_MAP:
+                service_data["rgb_color"] = _COLOR_MAP[cn]
+
+    try:
+        await ha_call_service("light", service, service_data)
+    except Exception as e:
+        logger.error(f"[Assist] HA set_light failed: {e}")
+        return f"Could not reach Home Assistant: {e}"
+
+    parts = []
+    if state == "on":
+        parts.append("Bedroom light turned ON.")
+    elif state == "off":
+        parts.append("Bedroom light turned OFF.")
+    else:
+        parts.append("Bedroom light updated.")
+    if brightness is not None:
+        pct = round(brightness / 255 * 100)
+        parts.append(f"Brightness set to {pct}%.")
+    if color_name:
+        parts.append(f"Color: {color_name}.")
+    return " ".join(parts)
+
+
+async def execute_home_get_state(entity_id: str) -> str:
+    """Get current state of an HA entity. Returns human-readable string."""
+    try:
+        state_data = await ha_get_state(entity_id)
+    except Exception as e:
+        logger.error(f"[Assist] HA get_state failed: {e}")
+        return f"Could not reach Home Assistant: {e}"
+
+    light_state = state_data.get("state", "unknown").upper()
+    attrs = state_data.get("attributes", {})
+    parts = [f"{entity_id} is {light_state}."]
+    if "brightness" in attrs and attrs["brightness"] is not None:
+        pct = round(attrs["brightness"] / 255 * 100)
+        parts.append(f"Brightness: {pct}%.")
+    if "color_temp_kelvin" in attrs and attrs["color_temp_kelvin"] is not None:
+        parts.append(f"Color temperature: {attrs['color_temp_kelvin']}K.")
+    return " ".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -843,78 +778,16 @@ async def _execute_tool_call(tool_call: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Pydantic models
-# ---------------------------------------------------------------------------
-
-class AssistRequest(BaseModel):
-    message: str
-    session_id: str = "assist-default"
-
-
-class AssistResponse(BaseModel):
-    response: str
-    tool_call: Optional[dict] = None
-    model_loaded: bool = False
-
-
-# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
-
-@router.post("/chat", response_model=AssistResponse)
-async def assist_chat(req: AssistRequest, request: Request):
-    """
-    Main Assist Mode endpoint. Bypasses the big LLM entirely.
-    Runs FunctionGemma (CPU) → executes HA tool call → returns template response.
-    """
-    if not _ha_url or not _ha_token:
-        raise HTTPException(
-            status_code=503,
-            detail="Home Assistant not configured. Set LOCALIS_HA_URL and LOCALIS_HA_TOKEN in secret.env"
-        )
-
-    model_path = _get_model_path()
-    if not model_path:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                f"Assist model not found: {_assist_model_file}. "
-                "Download from HuggingFace: "
-                "huggingface-cli download distil-labs/distil-home-assistant-functiongemma-gguf"
-            )
-        )
-
-    # Lazy-load model
-    try:
-        _ensure_assist_model()
-    except Exception as e:
-        logger.error(f"[Assist] Model load failed: {e}")
-        raise HTTPException(status_code=503, detail=str(e))
-
-    # Run inference (always returns a tool call — never None)
-    tool_call = _run_assist_with_retry(req.message.strip())
-
-    # Execute tool call against HA
-    result = await _execute_tool_call(tool_call)
-
-    return AssistResponse(
-        response=result["response"],
-        tool_call=result["raw"],
-        model_loaded=True,
-    )
-
 
 @router.get("/status")
 async def assist_status():
     """Readiness check for Assist Mode."""
-    model_path = _get_model_path()
     ha_configured = bool(_ha_url and _ha_token)
 
     return {
-        "available": bool(model_path and ha_configured),
-        "model_loaded": _assist_model is not None,
-        "model_file": _assist_model_file,
-        "model_found": model_path is not None,
+        "available": ha_configured,
         "ha_configured": ha_configured,
         "ha_url": _ha_url if ha_configured else None,
         "light_entity": _light_entity,
