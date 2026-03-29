@@ -14,7 +14,7 @@
 #
 # False negatives (not triggering):
 #   - Lower LOCALIS_WAKEWORD_THRESHOLD (recommended starting point: 0.15–0.20)
-#     The browser WS path uses an 8-frame (~640ms) moving average; typical "Hey Jarvis"
+#     The browser WS path uses an 8-frame (~640ms) moving average; typical "Hey Chotu"
 #     peak averages are 0.15–0.30 depending on mic and room conditions.
 #     Values above 0.25 are unlikely to trigger without a very clear recording environment.
 #   - Verify mic selection: python -c "import sounddevice as sd; print(sd.query_devices())"
@@ -287,14 +287,13 @@ def _check_wakeword(chunk: bytes) -> float:
 
 def _submit_chat(text: str, session_id: str) -> None:
     """
-    POST to /chat with assist_mode=True and stream-drain the response.
+    POST to /chat and stream-drain the response.
     Runs synchronously inside the daemon thread.
     """
     url = f"{WAKEWORD_BASE_URL}/chat"
     payload = {
         "session_id": session_id,
         "message": text,
-        "assist_mode": True,
     }
     try:
         with httpx.Client(timeout=60.0) as client:
@@ -628,7 +627,7 @@ def _load_ws_model():
 # Anti-spam detector (moving average + arm/disarm)
 # ---------------------------------------------------------------------------
 
-_WINDOW = 8             # frames → ~640 ms at 80ms/frame (fits "Hey Jarvis" utterance)
+_WINDOW = 8             # frames → ~640 ms at 80ms/frame (fits "Hey Chotu" utterance)
 _COOLDOWN_FRAMES = 25   # frames → ~2.0 s after trigger
 
 
