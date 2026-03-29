@@ -17,6 +17,7 @@ TIER-B (Extended): Auto-learned facts, interests, projects, preferences
 """
 
 import logging
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 import re
@@ -120,36 +121,39 @@ BULLET_LIST_MAX_ITEMS = 50
 # Embedding Logic (CPU)
 # ------------------------------------------------------------------------------
 _EMBEDDER = None
+_EMBEDDER_LOCK = threading.Lock()
 
 
 def get_embedder():
     """Lazy loader for SentenceTransformer with failure handling and GPU acceleration."""
     global _EMBEDDER
     if _EMBEDDER is None:
-        try:
-            from sentence_transformers import SentenceTransformer
-            import torch
-
-            # Auto-detect device
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            logger.info(f"[Memory] Loading embedding model {EMBEDDING_MODEL_NAME} on {device.upper()}...")
-
-            _EMBEDDER = SentenceTransformer(EMBEDDING_MODEL_NAME, device=device)
-
-            # Optimize for inference on GPU using FP16 for 2x faster processing
-            if device == "cuda":
+        with _EMBEDDER_LOCK:
+            if _EMBEDDER is None:
                 try:
-                    _EMBEDDER.half()
-                    logger.info("[Memory] Enabled FP16 mode for GPU acceleration")
-                except Exception as e:
-                    logger.warning(f"[Memory] Could not enable FP16: {e}")
+                    from sentence_transformers import SentenceTransformer
+                    import torch
 
-        except ImportError:
-            logger.warning("[Memory] 'sentence-transformers' not found. Vector memory disabled.")
-            return None
-        except Exception as e:
-            logger.error(f"[Memory] Error loading embedding model: {e}")
-            return None
+                    # Auto-detect device
+                    device = "cuda" if torch.cuda.is_available() else "cpu"
+                    logger.info(f"[Memory] Loading embedding model {EMBEDDING_MODEL_NAME} on {device.upper()}...")
+
+                    _EMBEDDER = SentenceTransformer(EMBEDDING_MODEL_NAME, device=device)
+
+                    # Optimize for inference on GPU using FP16 for 2x faster processing
+                    if device == "cuda":
+                        try:
+                            _EMBEDDER.half()
+                            logger.info("[Memory] Enabled FP16 mode for GPU acceleration")
+                        except Exception as e:
+                            logger.warning(f"[Memory] Could not enable FP16: {e}")
+
+                except ImportError:
+                    logger.warning("[Memory] 'sentence-transformers' not found. Vector memory disabled.")
+                    return None
+                except Exception as e:
+                    logger.error(f"[Memory] Error loading embedding model: {e}")
+                    return None
     return _EMBEDDER
 
 
@@ -196,11 +200,11 @@ def normalize_identity_value(key: str, value: str) -> str:
 def format_identity_for_prompt(identity: Dict[str, str]) -> str:
     if not identity:
         return ""
-    lines = ["[USER IDENTITY (Tier-A)]"]
+    lines = ["[ABOUT THE USER YOU ARE TALKING TO — this is not about yourself]"]
     for key in sorted(identity.keys()):
         val = identity[key]
-        label = key.replace("_", " ").capitalize()
-        lines.append(f"* {label}: {val}")
+        label = key.replace("_", " ").lower()
+        lines.append(f"* The user's {label} is: {val}")
     return "\n".join(lines)
 
 
@@ -459,8 +463,9 @@ def tool_memory_write(
         database.upsert_user_memory_meta(safe_key, meta)
         log_event("tool_write_tier_a", {"key": safe_key}, session_id)
 
-        # Invalidate identity cache after Tier-A write
+        # Invalidate caches after Tier-A write
         invalidate_identity_cache()
+        _retrieval_cache.clear()
 
         return {"ok": True, "key": safe_key}
 
@@ -497,6 +502,7 @@ def tool_memory_write(
         # Also index in vector store for retrieval
         add_vector_memory(clean_val, session_id, intent, authority, source, None)
 
+        _retrieval_cache.clear()
         log_event("tool_write_tier_b", {"key": final_key}, session_id)
         return {"ok": True, "key": final_key}
 
@@ -755,6 +761,8 @@ def apply_memory_write(proposal: MemoryProposal, session_id: Optional[str] = Non
 def forget_memory(key: str, session_id: Optional[str] = None) -> bool:
     d1 = database.delete_user_memory(key)
     d2 = database.delete_user_memory_meta(key)
+    _retrieval_cache.clear()
+    invalidate_identity_cache()
     log_event("memory_forget", {"key": key}, session_id)
     return d1 or d2
 
