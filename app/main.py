@@ -350,6 +350,136 @@ def get_permitted_tools(web_search_on: bool) -> list:
     return result
 
 
+async def execute_tool_call(
+    tool_name: str,
+    tool_args: dict,
+    user_msg: str,
+    session_id: str,
+    web_search_provider: str | None,
+    web_search_custom_endpoint: str | None,
+    web_search_custom_api_key: str | None,
+) -> str:
+    """
+    Dispatch a single LLM tool call. Returns a plain-text result string.
+    Never raises — catches all exceptions and returns an error string.
+    """
+    try:
+        # --- Web Search ---
+        if tool_name == "web.search":
+            query = tool_args.get("query", user_msg)
+            provider = web_search_provider or database.get_app_setting("web_search_provider") or "auto"
+            endpoint = web_search_custom_endpoint or database.get_app_setting("web_search_custom_endpoint")
+            result = await tools.tool_web_search(
+                query=query, provider=provider,
+                custom_endpoint=endpoint, custom_api_key=web_search_custom_api_key
+            )
+            return result if not result.startswith("ERROR") else f"Web search failed: {result}"
+
+        # --- Home Assistant ---
+        elif tool_name == "home.set_light":
+            from .assist import execute_home_set_light, is_ha_configured
+            if not is_ha_configured():
+                return "Home Assistant is not configured."
+            return await execute_home_set_light(
+                state=tool_args.get("state", "on"),
+                brightness=tool_args.get("brightness"),
+                color_name=tool_args.get("color_name"),
+            )
+
+        elif tool_name == "home.get_device_state":
+            from .assist import execute_home_get_state, is_ha_configured
+            if not is_ha_configured():
+                return "Home Assistant is not configured."
+            return await execute_home_get_state(
+                entity_id=tool_args.get("entity_id", "light.rishi_room_light")
+            )
+
+        # --- Notes ---
+        elif tool_name == "notes.add":
+            import sqlite3 as _sqlite3, uuid as _uuid
+            from datetime import datetime as _dt2, timezone as _tz2
+            content = tool_args.get("content", "").strip()
+            if not content:
+                return "Could not save note — content was empty."
+            note_type = tool_args.get("note_type", "note")
+            due_at = tool_args.get("due_at") or None
+            note_id = str(_uuid.uuid4())
+            now = _dt2.now(_tz2.utc).isoformat()
+            conn = _sqlite3.connect(database.DB_NAME)
+            conn.execute(
+                "INSERT INTO notes (id, content, note_type, due_at, color, pinned, dismissed, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, 'default', 0, NULL, ?, ?)",
+                (note_id, content, note_type, due_at, now, now)
+            )
+            conn.commit()
+            conn.close()
+            if note_type == "reminder" and due_at:
+                return f"Reminder set: \"{content}\" due {due_at}."
+            return f"Note saved: \"{content}\"."
+
+        elif tool_name == "notes.retrieve":
+            import sqlite3 as _sqlite3
+            note_filter = tool_args.get("filter", "all")
+            conn = _sqlite3.connect(database.DB_NAME)
+            if note_filter == "reminders":
+                rows = conn.execute(
+                    "SELECT content, note_type, due_at FROM notes WHERE dismissed IS NULL "
+                    "AND note_type='reminder' ORDER BY created_at DESC LIMIT 10"
+                ).fetchall()
+            elif note_filter == "notes":
+                rows = conn.execute(
+                    "SELECT content, note_type, due_at FROM notes WHERE dismissed IS NULL "
+                    "AND note_type='note' ORDER BY created_at DESC LIMIT 10"
+                ).fetchall()
+            elif note_filter == "due_soon":
+                rows = conn.execute(
+                    "SELECT content, note_type, due_at FROM notes WHERE dismissed IS NULL "
+                    "AND due_at IS NOT NULL ORDER BY due_at ASC LIMIT 10"
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT content, note_type, due_at FROM notes WHERE dismissed IS NULL "
+                    "ORDER BY created_at DESC LIMIT 10"
+                ).fetchall()
+            conn.close()
+            if not rows:
+                return "No notes found."
+            parts = []
+            for content, note_type, due_at in rows:
+                if note_type == "reminder" and due_at:
+                    parts.append(f"Reminder: {content} (due {due_at[:10]})")
+                else:
+                    parts.append(f"Note: {content}")
+            return "\n".join(parts)
+
+        # --- Memory ---
+        elif tool_name == "memory.retrieve":
+            query = tool_args.get("query", user_msg)
+            return memory_core.tool_memory_retrieve(query=query, session_id=session_id)
+
+        elif tool_name == "memory.write":
+            key = tool_args.get("key", "fact").strip()
+            value = tool_args.get("value", "").strip()
+            if not value:
+                return "Could not save memory — value was empty."
+            res = memory_core.tool_memory_write(
+                session_id=session_id, key=key, value=value,
+                intent="preference", authority="user_explicit",
+                source="user", confidence=0.9,
+                reason="llm_tool_write", target="tier_b"
+            )
+            if res.get("ok"):
+                return f"Remembered: {key} = {value}."
+            return f"Memory write skipped: {res.get('skipped_reason', 'unknown')}."
+
+        else:
+            return f"Unknown tool: {tool_name}"
+
+    except Exception as e:
+        logger.error(f"[Tool] {tool_name} failed: {e}", exc_info=True)
+        return f"Tool {tool_name} encountered an error: {str(e)}"
+
+
 # Notes Tool Schemas (for router LLM tool calling)
 # Referenced by execute_tool() and can be injected into any router system prompt.
 # Uses the same function-calling schema format as assist.py _build_tool_schema().
